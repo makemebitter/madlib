@@ -1543,6 +1543,28 @@ CREATE AGGREGATE MADLIB_SCHEMA.mlp_minibatch_step(
     FINALFUNC=MADLIB_SCHEMA.mlp_minibatch_final,
     INITCOND='{0,0,0,0,0,0,0,0,0,0,0,0,0,0}'
 );
+
+CREATE AGGREGATE MADLIB_SCHEMA.mlp_minibatch_step_param_search(
+        /* ind_var */             DOUBLE PRECISION[],
+        /* dep_var */             DOUBLE PRECISION[],
+        /* previous_state */      DOUBLE PRECISION[],
+        /* layer_sizes */         DOUBLE PRECISION[],
+        /* learning_rate_init */  DOUBLE PRECISION,
+        /* activation */          INTEGER,
+        /* is_classification */   INTEGER,
+        /* weight */              DOUBLE PRECISION,
+        /* warm_start_coeff */    DOUBLE PRECISION[],
+        /* lambda */              DOUBLE PRECISION,
+        /* batch_size */          INTEGER,
+        /* n_epochs */            INTEGER,
+        /* momentum */            DOUBLE PRECISION,
+        /* is_nesterov */         BOOLEAN
+        )(
+    STYPE=DOUBLE PRECISION[],
+    SFUNC=MADLIB_SCHEMA.mlp_minibatch_transition,
+    FINALFUNC=MADLIB_SCHEMA.mlp_minibatch_final,
+    INITCOND='{0,0,0,0,0,0,0,0,0,0,0,0,0,0}'
+);
 -------------------------------------------------------------------------
 
 CREATE FUNCTION MADLIB_SCHEMA.internal_mlp_igd_distance(

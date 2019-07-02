@@ -170,7 +170,7 @@ SELECT madlib.minibatch_preprocessor('iris_data',         -- Source table
                                      ,NULL, 2);
 
 DROP TABLE IF EXISTS iris_data_param_search ;
-CREATE TABLE iris_data_param_search as (select *, mod(__id__, 3)  as dist_key from iris_data_packed) distributed randomly;
+CREATE TABLE iris_data_param_search as (select *, mod(__id__, 3)*5  as dist_key from iris_data_packed) distributed by (dist_key);
 select gp_segment_id,count(*) from iris_data_param_search  group by gp_segment_id;
 
 

@@ -5,7 +5,7 @@ from multiprocessing import Process
 import psycopg2
 import argparse
 import json
-
+import time
 
 def get_connection():
     """Summary
@@ -18,6 +18,8 @@ def get_connection():
                                   port="15432",
                                   database="param_search")
     cursor = connection.cursor()
+    cursor.execute("set optimizer = off")
+    connection.commit()
     return connection, cursor
 
 
@@ -67,7 +69,7 @@ def runInParallel(grand_schedule, msts_key_map, msts, weights_table, data_table)
             mst = grand_schedule[worker_id][i]
             key = mst_to_key(mst)
             weights = weights_map[key] if key in weights_map else None
-
+            # TODO Don't mix worker_id and partition_id
             p = Process(target=run_query, args=(
                 worker_id, mst, key, weights, weights_table, data_table))
             p.start()
@@ -210,6 +212,9 @@ def main(worker_ids, msts):
         runInParallel(grand_schedule, msts_key_map, msts,
                       args.weights_table, args.data_table)
 
+#TODO
+# 1. fix worker ids
+# 2. update/insert 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -226,6 +231,7 @@ if __name__ == "__main__":
                         help="Name of the data table")
     args = parser.parse_args()
 
+    start_time = time.time()
     # TODO query worker number and partition info on-the-fly
     WORKER_NUMBER = 3
     worker_ids = range(WORKER_NUMBER)
@@ -235,3 +241,4 @@ if __name__ == "__main__":
     find_combinations(msts, param_grid)
     print("MSTS: {}".format(msts))
     main(worker_ids, msts)
+    print("End to end runtime: {}".format(time.time() - start_time))
