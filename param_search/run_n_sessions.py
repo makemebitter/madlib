@@ -1,11 +1,15 @@
 """Summary
 
 """
+import multiprocessing
 from multiprocessing import Process
 import psycopg2
 import argparse
 import json
 import time
+import numpy as np
+from collections import defaultdict
+
 
 def get_connection():
     """Summary
@@ -23,11 +27,15 @@ def get_connection():
     return connection, cursor
 
 
-def run_query(partition_id, mst, mst_key, weights, weights_table, data_table):
+def run_query_unpack(args):
+    return run_query(*args)
+
+
+def run_query(worker_id, mst, mst_key, weights_table, data_table):
     """Summary
 
     Args:
-        partition_id (TYPE): Description
+        worker_id (TYPE): Description
         mst (TYPE): Description
         mst_key (TYPE): Description
         weights (TYPE): Description
@@ -37,18 +45,64 @@ def run_query(partition_id, mst, mst_key, weights, weights_table, data_table):
     """
 
     connection, cursor = get_connection()
-    weights = "ARRAY{}".format(weights) if weights else 'NULL'
+    # weights = "ARRAY{}".format(weights) if weights else 'NULL'
     mlp_model = "ARRAY{}".format(mst['model'])
+    mlp_training_query = """
+                            DROP TABLE IF EXISTS weights_one_partition_{};
+                            CREATE TABLE weights_one_partition_{} AS (
+                                WITH prev_weights
+                                AS (SELECT weights
+                                    FROM {}
+                                    WHERE mst_key='{}'
+                                    )
+                                SELECT madlib.mlp_minibatch_step(independent_varname,
+                                    dependent_varname,
+                                    prev_weights.weights,
+                                    {},
+                                    {},1,1,0,NULL,
+                                    {},2,1,0.5,False
+                                    )::double precision[] as weights,
+                                    '{}' as mst_key
+                                FROM {}, prev_weights
+                                WHERE dist_key={}
+
+                            )
+                        """.format(worker_id,
+                                   worker_id,
+                                   weights_table,
+                                   mst_key,
+                                   mlp_model,
+                                   mst['learning_rate'],
+                                   mst['lambda_value'],
+                                   mst_key,
+                                   data_table,
+                                   worker_id,)
+    cursor.execute(mlp_training_query)
+    mlp_loss_query = """
+                        SELECT weights[array_length(weights, 1)]
+                        FROM weights_one_partition_{}
+                    """.format(worker_id)
+    cursor.execute(mlp_loss_query)
+    record = cursor.fetchone()
+    print("partition: {}, mst: {}, loss: {}".format(
+        worker_id, mst_key, record[0]))
+    connection.commit()
     mlp_uda_query = """
-    insert into {} (select madlib.mlp_minibatch_step(independent_varname,dependent_varname,
-    {},{},{},1,1,0,NULL,{},2,1,0.5,False)::double precision[], '{}' 
-    from {} where dist_key={});""".format(weights_table, weights, mlp_model, mst['learning_rate'], mst['lambda_value'], mst_key, data_table, partition_id)
+                    UPDATE {} SET weights = weights_one_partition_{}.weights
+                    FROM  weights_one_partition_{}
+                    WHERE {}.mst_key = weights_one_partition_{}.mst_key
+                    """.format(weights_table,
+                               worker_id,
+                               worker_id,
+                               weights_table,
+                               worker_id)
 
     cursor.execute(mlp_uda_query)
     cursor.close()
     connection.commit()
+    return worker_id, mst_key, record[0]
     # record = cursor.fetchone()
-    # print("sum of batch {} for seg id is {}\n".format(partition_id, record))
+    # print("sum of batch {} for seg id is {}\n".format(worker_id, record))
     # print("record shape is {}".format(len(record[0])))
 
 
@@ -62,26 +116,35 @@ def runInParallel(grand_schedule, msts_key_map, msts, weights_table, data_table)
         weights_table (TYPE): Description
         data_table (TYPE): Description
     """
-    weights_map = dict.fromkeys((range(10)))
+    summary = defaultdict(dict)
+    pool = multiprocessing.Pool(processes=len(worker_ids))
     for i in range(len(msts_key_map)):
-        proc = []
+        args_list = []
         for worker_id in worker_ids:
             mst = grand_schedule[worker_id][i]
             key = mst_to_key(mst)
-            weights = weights_map[key] if key in weights_map else None
-            # TODO Don't mix worker_id and partition_id
-            p = Process(target=run_query, args=(
-                worker_id, mst, key, weights, weights_table, data_table))
-            p.start()
-            print("Received mst:{} on worker {} with pid:{}".format(
-                mst_to_key(mst), worker_id, p.pid))
-            proc.append(p)
-        for p in proc:
-            p.join()
+            args_list.append([worker_id, mst, key, weights_table, data_table])
+        print ("arg_lists: {}".format(args_list))
+        fet_res = pool.map(run_query_unpack, args_list)
+        for worker_id_fetched, mst_key_fetched, loss_fetched in fet_res:
+            summary[mst_key_fetched][worker_id_fetched] = loss_fetched
+
+        # ALternative implementation with Process API, harder to fetch results
+        # proc = []
+        # for worker_id in worker_ids:
+        #     mst = grand_schedule[worker_id][i]
+        #     key = mst_to_key(mst)
+        #     weights = weights_map[key] if key in weights_map else None
+        #     p = Process(target=run_query, args=(
+        #         worker_id, mst, key, weights, weights_table, data_table))
+        #     p.start()
+        #     print("Received mst:{} on worker {} with pid:{}".format(
+        #         mst_to_key(mst), worker_id, p.pid))
+        #     proc.append(p)
+        # for p in proc:
+        #     p.join()
         print("Done with one set of mst for all workers")
-        for mst in msts:
-            key = mst_to_key(mst)
-            weights_map[key] = query_weights(key, weights_table)
+    return summary
 
 
 def mst_to_key(mst):
@@ -143,12 +206,12 @@ def generate_schedule(worker_ids, msts):
         msts (TYPE): Description
     """
     grand_schedule = {}
-    for worker_id in worker_ids:
-        grand_schedule[worker_id] = rotate(msts, worker_id)
+    for i, worker_id in enumerate(worker_ids):
+        grand_schedule[worker_id] = rotate(msts, i)
     return grand_schedule
 
 
-def create_weights_table(weights_table):
+def create_weights_table(weights_table, msts):
     """Summary
 
     Args:
@@ -157,9 +220,13 @@ def create_weights_table(weights_table):
     connection, cursor = get_connection()
     query = ("drop table if exists public.{};" +
              " create table public.{}" +
-             " (weights double precision[], mst_key text);"
+             " (weights double precision[], mst_key text primary key);"
              ).format(weights_table, weights_table)
     cursor.execute(query)
+    for mst in msts:
+        weights_insert_query = "INSERT INTO {} VALUES (NULL, '{}')".format(
+            weights_table, mst_to_key(mst))
+        cursor.execute(weights_insert_query)
     cursor.close()
     connection.commit()
 
@@ -206,15 +273,24 @@ def main(worker_ids, msts):
         msts_key_map[key] = mst
 
     grand_schedule = generate_schedule(worker_ids, msts)
-    create_weights_table(args.weights_table)
+    print("Grand schedule: {}".format(grand_schedule))
+
+    create_weights_table(args.weights_table, msts)
+    summary = {}
     for i in range(args.epochs):
         print ("Epoch: {}".format(i))
-        runInParallel(grand_schedule, msts_key_map, msts,
-                      args.weights_table, args.data_table)
+        epoch_summary = runInParallel(grand_schedule, msts_key_map, msts,
+                                      args.weights_table, args.data_table)
+        summary[i] = epoch_summary
+    print(summary)
+    for key in msts_key_map.keys():
+        learning_curve_y = []
+        for i in range(args.epochs):
+            partition_loss = summary[i][key]
+            total_loss = np.mean(partition_loss.values())
+            learning_curve_y.append(total_loss)
+        print (key, learning_curve_y)
 
-#TODO
-# 1. fix worker ids
-# 2. update/insert 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -235,6 +311,7 @@ if __name__ == "__main__":
     # TODO query worker number and partition info on-the-fly
     WORKER_NUMBER = 3
     worker_ids = range(WORKER_NUMBER)
+    worker_ids = [w * 5 for w in worker_ids]
     with open(args.mst_config_file, "r") as read_file:
         param_grid = json.load(read_file)
     msts = []
