@@ -2,7 +2,7 @@
 
 """
 import multiprocessing
-from multiprocessing import Process
+# from multiprocessing import Process
 import psycopg2
 import argparse
 import json
@@ -21,6 +21,7 @@ def get_connection():
                                   host="127.0.0.1",
                                   port="15432",
                                   database="param_search")
+    connection.autocommit = True
     cursor = connection.cursor()
     cursor.execute("set optimizer = off")
     connection.commit()
@@ -31,7 +32,7 @@ def run_query_unpack(args):
     return run_query(*args)
 
 
-def run_query(worker_id, mst, mst_key, weights_table, data_table):
+def run_query(worker_id, mst, mst_key, weights_table, data_table, is_summary):
     """Summary
 
     Args:
@@ -55,11 +56,11 @@ def run_query(worker_id, mst, mst_key, weights_table, data_table):
                                     FROM {}
                                     WHERE mst_key='{}'
                                     )
-                                SELECT madlib.mlp_minibatch_step(independent_varname,
+                                SELECT madlib.mlp_minibatch_step_param_search(independent_varname,
                                     dependent_varname,
                                     prev_weights.weights,
                                     {},
-                                    {},1,1,0,NULL,
+                                    {},1,1,1,NULL,
                                     {},2,1,0.5,False
                                     )::double precision[] as weights,
                                     '{}' as mst_key
@@ -78,16 +79,18 @@ def run_query(worker_id, mst, mst_key, weights_table, data_table):
                                    data_table,
                                    worker_id,)
     cursor.execute(mlp_training_query)
-    mlp_loss_query = """
-                        SELECT weights[array_length(weights, 1)]
-                        FROM weights_one_partition_{}
-                    """.format(worker_id)
-    cursor.execute(mlp_loss_query)
-    record = cursor.fetchone()
-    print("partition: {}, mst: {}, loss: {}".format(
-        worker_id, mst_key, record[0]))
-    connection.commit()
-    mlp_uda_query = """
+    loss = None
+    if is_summary:
+        mlp_loss_query = """
+                            SELECT weights[array_length(weights, 1)]
+                            FROM weights_one_partition_{}
+                        """.format(worker_id)
+        cursor.execute(mlp_loss_query)
+        record = cursor.fetchone()
+        loss = record[0]
+    print("partition: {}, mst: {}, loss: {}".format(worker_id, mst_key, loss))
+
+    mlp_weights_update_query = """
                     UPDATE {} SET weights = weights_one_partition_{}.weights
                     FROM  weights_one_partition_{}
                     WHERE {}.mst_key = weights_one_partition_{}.mst_key
@@ -97,16 +100,16 @@ def run_query(worker_id, mst, mst_key, weights_table, data_table):
                                weights_table,
                                worker_id)
 
-    cursor.execute(mlp_uda_query)
+    cursor.execute(mlp_weights_update_query)
     cursor.close()
-    connection.commit()
-    return worker_id, mst_key, record[0]
+    return worker_id, mst_key, loss
     # record = cursor.fetchone()
     # print("sum of batch {} for seg id is {}\n".format(worker_id, record))
     # print("record shape is {}".format(len(record[0])))
 
 
-def runInParallel(grand_schedule, msts_key_map, msts, weights_table, data_table):
+def runInParallel(grand_schedule,
+                  msts_key_map, msts, weights_table, data_table, is_summary):
     """Summary
 
     Args:
@@ -123,26 +126,13 @@ def runInParallel(grand_schedule, msts_key_map, msts, weights_table, data_table)
         for worker_id in worker_ids:
             mst = grand_schedule[worker_id][i]
             key = mst_to_key(mst)
-            args_list.append([worker_id, mst, key, weights_table, data_table])
+            args_list.append([worker_id,
+                              mst, key, weights_table, data_table, is_summary])
         print ("arg_lists: {}".format(args_list))
         fet_res = pool.map(run_query_unpack, args_list)
-        for worker_id_fetched, mst_key_fetched, loss_fetched in fet_res:
-            summary[mst_key_fetched][worker_id_fetched] = loss_fetched
-
-        # ALternative implementation with Process API, harder to fetch results
-        # proc = []
-        # for worker_id in worker_ids:
-        #     mst = grand_schedule[worker_id][i]
-        #     key = mst_to_key(mst)
-        #     weights = weights_map[key] if key in weights_map else None
-        #     p = Process(target=run_query, args=(
-        #         worker_id, mst, key, weights, weights_table, data_table))
-        #     p.start()
-        #     print("Received mst:{} on worker {} with pid:{}".format(
-        #         mst_to_key(mst), worker_id, p.pid))
-        #     proc.append(p)
-        # for p in proc:
-        #     p.join()
+        if is_summary:
+            for worker_id_fetched, mst_key_fetched, loss_fetched in fet_res:
+                summary[mst_key_fetched][worker_id_fetched] = loss_fetched
         print("Done with one set of mst for all workers")
     return summary
 
@@ -159,27 +149,6 @@ def mst_to_key(mst):
     key_components = ["{}:{}".format(k, v) for k, v in mst.items()]
     key = '-'.join(key_components)
     return key
-
-
-def query_weights(mst_key, weights_table):
-    """Summary
-
-    Args:
-        mst_key (TYPE): Description
-        weights_table (TYPE): Description
-
-    Returns:
-        TYPE: Description
-
-    """
-    _, cursor = get_connection()
-    mlp_get_weights_query = ("select weights" +
-                             " from {}" +
-                             " where mst_key='{}'"
-                             ).format(weights_table, mst_key)
-    cursor.execute(mlp_get_weights_query)
-    record = cursor.fetchone()
-    return record[0] if record else None
 
 
 def rotate(l, n):
@@ -218,8 +187,8 @@ def create_weights_table(weights_table, msts):
         weights_table (TYPE): Description
     """
     connection, cursor = get_connection()
-    query = ("drop table if exists public.{};" +
-             " create table public.{}" +
+    query = ("drop table if exists {};" +
+             " create table {}" +
              " (weights double precision[], mst_key text primary key);"
              ).format(weights_table, weights_table)
     cursor.execute(query)
@@ -274,22 +243,27 @@ def main(worker_ids, msts):
 
     grand_schedule = generate_schedule(worker_ids, msts)
     print("Grand schedule: {}".format(grand_schedule))
-
+    print("Initilizing weights table ...")
     create_weights_table(args.weights_table, msts)
-    summary = {}
+    print("Initilizing weights table ... done")
+    if args.is_summary:
+        summary = {}
     for i in range(args.epochs):
         print ("Epoch: {}".format(i))
         epoch_summary = runInParallel(grand_schedule, msts_key_map, msts,
-                                      args.weights_table, args.data_table)
-        summary[i] = epoch_summary
-    print(summary)
-    for key in msts_key_map.keys():
-        learning_curve_y = []
-        for i in range(args.epochs):
-            partition_loss = summary[i][key]
-            total_loss = np.mean(partition_loss.values())
-            learning_curve_y.append(total_loss)
-        print (key, learning_curve_y)
+                                      args.weights_table, args.data_table,
+                                      args.is_summary)
+        if args.is_summary:
+            summary[i] = epoch_summary
+    if args.is_summary:
+        print(summary)
+        for key in msts_key_map.keys():
+            learning_curve_y = []
+            for i in range(args.epochs):
+                partition_loss = summary[i][key]
+                total_loss = np.mean(partition_loss.values())
+                learning_curve_y.append(total_loss)
+            print (key, learning_curve_y)
 
 
 if __name__ == "__main__":
@@ -302,9 +276,11 @@ if __name__ == "__main__":
     parser.add_argument("-w", "--weights_table", nargs='?',
                         default='n_sessions_weights', type=str,
                         help="Name of the weights table")
-    parser.add_argument("-t", "--data_table", nargs='?',
+    parser.add_argument("-d", "--data_table", nargs='?',
                         default='iris_data_param_search', type=str,
                         help="Name of the data table")
+    parser.add_argument("-s", "--is_summary", action='store_true',
+                        help="Enable the flag to print out the summary")
     args = parser.parse_args()
 
     start_time = time.time()
@@ -318,4 +294,4 @@ if __name__ == "__main__":
     find_combinations(msts, param_grid)
     print("MSTS: {}".format(msts))
     main(worker_ids, msts)
-    print("End to end runtime: {}".format(time.time() - start_time))
+    print("End to end run time: {}".format(time.time() - start_time))

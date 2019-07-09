@@ -187,6 +187,7 @@ struct MLPModel {
 
     void initialize(const uint16_t &inNumberOfStages,
                     const double *inNumbersOfUnits) {
+        std::srand(1);
         num_layers = inNumberOfStages;
         for (size_t k =0; k < num_layers; ++k){
             // Initalize according to Glorot and Bengio (2010)
