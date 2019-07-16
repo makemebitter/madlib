@@ -24,7 +24,6 @@ def get_connection():
     connection.autocommit = True
     cursor = connection.cursor()
     cursor.execute("set optimizer = off")
-    connection.commit()
     return connection, cursor
 
 
@@ -47,39 +46,55 @@ def run_query(worker_id, mst, mst_key, weights_table, data_table, is_summary):
 
     connection, cursor = get_connection()
     # weights = "ARRAY{}".format(weights) if weights else 'NULL'
+    # -- WITH prev_weights
+    #                             -- AS (SELECT weights
+    #                             --     FROM {}
+    #                             --     WHERE mst_key='{}'
+    #                             --     )
     mlp_model = "ARRAY{}".format(mst['model'])
+    weights_query = """
+                SELECT weights from {} where mst_key='{}'
+                """.format(weights_table, mst_key)
+    cursor.execute(weights_query)
+    weights = cursor.fetchone()[0]
+    if weights:
+        weights = "ARRAY{}".format(weights)
+    else:
+        weights = "NULL"
     mlp_training_query = """
                             DROP TABLE IF EXISTS weights_one_partition_{};
                             CREATE TABLE weights_one_partition_{} AS (
-                                WITH prev_weights
-                                AS (SELECT weights
-                                    FROM {}
-                                    WHERE mst_key='{}'
-                                    )
                                 SELECT madlib.mlp_minibatch_step_param_search(independent_varname,
                                     dependent_varname,
-                                    prev_weights.weights,
+                                    {},
                                     {},
                                     {},1,1,1,NULL,
                                     {},2,1,0.5,False
                                     )::double precision[] as weights,
                                     '{}' as mst_key
-                                FROM {}, prev_weights
-                                WHERE dist_key={}
-
+                                FROM {}
+                                WHERE dist_key={} 
                             )
                         """.format(worker_id,
                                    worker_id,
-                                   weights_table,
-                                   mst_key,
+                                   weights,
+                                   # weights_table,
+                                   # mst_key,
                                    mlp_model,
                                    mst['learning_rate'],
                                    mst['lambda_value'],
                                    mst_key,
                                    data_table,
-                                   worker_id,)
+                                   # weights_table,
+                                   worker_id,
+                                   # mst_key
+                                   )
+    begin_time = time.time()
     cursor.execute(mlp_training_query)
+    curr_time = time.time() - begin_time
+    print("Run time for uda execution for worker {}: {}".format(worker_id, curr_time))
     loss = None
+    begin_time = time.time()
     if is_summary:
         mlp_loss_query = """
                             SELECT weights[array_length(weights, 1)]
@@ -89,6 +104,8 @@ def run_query(worker_id, mst, mst_key, weights_table, data_table, is_summary):
         record = cursor.fetchone()
         loss = record[0]
     print("partition: {}, mst: {}, loss: {}".format(worker_id, mst_key, loss))
+    curr_time = time.time() - begin_time
+    print("Run time for summary retrieval for worker {}: {}".format(worker_id, curr_time))
 
     mlp_weights_update_query = """
                     UPDATE {} SET weights = weights_one_partition_{}.weights
@@ -99,8 +116,10 @@ def run_query(worker_id, mst, mst_key, weights_table, data_table, is_summary):
                                worker_id,
                                weights_table,
                                worker_id)
-
+    begin_time = time.time()
     cursor.execute(mlp_weights_update_query)
+    curr_time = time.time() - begin_time
+    print("Run time for weights update for worker {}: {}".format(worker_id, curr_time))
     cursor.close()
     return worker_id, mst_key, loss
     # record = cursor.fetchone()
