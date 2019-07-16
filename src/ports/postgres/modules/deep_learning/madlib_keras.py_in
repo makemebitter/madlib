@@ -156,7 +156,7 @@ def fit(schema_madlib, source_table, model, model_arch_table,
 
         if should_compute_metrics_this_iter(i, metrics_compute_frequency,
                                             num_iterations):
-            # Compute loss/accuracy for training data.
+            # Compute loss/accuracyçfor training data.
             compute_out = compute_loss_and_metrics(
                 schema_madlib, source_table, compile_params_to_pass, model_arch,
                 serialized_weights, gpus_per_host, segments_per_host, seg_ids_train,
@@ -406,7 +406,7 @@ def should_compute_metrics_this_iter(curr_iter, metrics_compute_frequency,
 def fit_transition(state, dependent_var, independent_var, model_architecture,
                    compile_params, fit_params, current_seg_id, seg_ids,
                    images_per_seg, gpus_per_host, segments_per_host,
-                   prev_serialized_weights, **kwargs):
+                   prev_serialized_weights, is_cerebro=False, **kwargs):
     if not independent_var or not dependent_var:
         return state
 
@@ -414,6 +414,9 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     SD = kwargs['SD']
     device_name = get_device_name_and_set_cuda_env(gpus_per_host,
                                                    current_seg_id)
+    if is_cerebro:
+        prev_serialized_weights = madlib_keras_serializer.\
+            get_serialized_1d_weights_from_state(prev_serialized_weights)
     # Set up system if this is the first buffer on segment'
     if not state:
         set_keras_session(device_name, gpus_per_host, segments_per_host)
@@ -426,7 +429,6 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     else:
         segment_model = SD['segment_model']
         agg_image_count = madlib_keras_serializer.get_image_count_from_state(state)
-
     # Prepare the data
     x_train = np_array_float32(independent_var)
     y_train = np_array_int16(dependent_var)
@@ -455,11 +457,11 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
         # Once done with all images on a segment, we update weights
         # with the total number of images here instead of the merge function.
         # The merge function only deals with aggregating them.
-        updated_weights = [ total_images * w for w in updated_weights ]
-            # In GPDB, each segment would have a keras session, so clear
-            # them after the last buffer is processed.
+        if not is_cerebro:
+            updated_weights = [ total_images * w for w in updated_weights ]
+                # In GPDB, each segment would have a keras session, so clear
+                # them after the last buffer is processed.
         clear_keras_session()
-
     new_state = madlib_keras_serializer.serialize_state_with_nd_weights(
         agg_image_count, updated_weights)
 
