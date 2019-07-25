@@ -171,16 +171,17 @@ SELECT madlib.train_test_split('iris_data_dl',     -- Source table
 SELECT COUNT(*) FROM iris_train;
 
 DROP TABLE IF EXISTS mlp_prediction_dl;
-DROP TABLE IF EXISTS iris_train_packed, iris_train_packed_summary, iris_train_packed_param_search;
+DROP TABLE IF EXISTS iris_train_packed, iris_train_packed_summary, iris_train_packed_param_search_summary, iris_train_packed_param_search;
 SELECT madlib.training_preprocessor_dl('iris_train',         -- Source table
                                        'iris_train_packed',  -- Output table
                                        'class_text',         -- Dependent variable
-                                       'attributes'          -- Independent variable
+                                       'attributes',         -- Independent variable
+6
                                         );
 										
 CREATE TABLE iris_train_packed_param_search as (select *, mod(row_number() over(), 3)*5  as dist_key from iris_train_packed) distributed by (dist_key);
 
-SELECT * FROM iris_train_packed_summary;
+CREATE TABLE iris_train_packed_param_search_summary as SELECT * FROM iris_train_packed_summary;
 
 DROP TABLE IF EXISTS iris_test_packed, iris_test_packed_summary, iris_test_packed_param_search;
 SELECT madlib.validation_preprocessor_dl('iris_test',          -- Source table
