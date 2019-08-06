@@ -1184,17 +1184,18 @@ FROM iris_model_first_run AS first, iris_model_transfer_summary AS second;
 -- Multiple models test
 DROP TABLE if exists iris_data_packed_dist, iris_data_packed_dist_summary;
 CREATE TABLE iris_data_packed_dist AS
-	SELECT *, (row_number() over())%3 AS dist_key FROM iris_data_packed;
+	SELECT *, (row_number() over())%3 AS dist_key FROM iris_data_packed
+DISTRIBUTED BY (dist_key);
 CREATE TABLE iris_data_packed_dist_summary AS SELECT * FROM iris_data_packed_summary;
 
 DROP TABLE IF EXISTS mst_table;
 CREATE TABLE mst_table (mst_key INTEGER,
-		                model_arch_id INTEGER,
-		                compile_params VARCHAR,
-		                fit_params VARCHAR,
-                 		unique (model_arch_id, compile_params, fit_params));
+						model_id INTEGER,
+						compile_params VARCHAR,
+						fit_params VARCHAR,
+						unique (model_id, compile_params, fit_params));
 INSERT INTO mst_table(mst_key,
-	model_arch_id,
+	model_id,
 	compile_params,
 	fit_params)
 	VALUES (1, 1,
@@ -1205,7 +1206,8 @@ INSERT INTO mst_table(mst_key,
 	       'batch_size=16, epochs=1'),
 	       (3, 1,
 	       'loss=''categorical_crossentropy'', optimizer=''Adam(lr=0.0001)'', metrics=[''accuracy'']',
-	       'batch_size=16, epochs=1');
+	       'batch_size=16, epochs=1'
+           );
 
 CREATE FUNCTION test_mult_models()
 RETURNS VOID AS $$
@@ -1217,7 +1219,7 @@ PERFORM madlib_keras_fit_multiple_model(
 	'iris_multiple_model',
 	'iris_model_arch',
 	'mst_table',
-	2,
+	5,
 	0
 );
 
@@ -1229,24 +1231,27 @@ PERFORM assert(
         dependent_varname = 'class_text' AND
         independent_varname = 'attributes' AND
         madlib_version is NOT NULL AND
-        num_iterations = 2 AND
+        num_iterations = 5 AND
         num_classes = 3 AND
         class_values = '{Iris-setosa,Iris-versicolor,Iris-virginica}' AND
         normalizing_const = 1,
         'Keras Fit Multiple Output Summary Validation failed. Actual:' || __to_char(summary))
 FROM (SELECT * FROM iris_multiple_model_summary) summary;
 
+PERFORM assert(COUNT(*)=3, 'Info table must have exactly same rows as the number of msts.')
+FROM iris_multiple_model_info;
+
 PERFORM assert(
-        model_arch_id = 1 AND
+        model_id = 1 AND
         model_type = 'madlib_keras' AND
         model_size > 0 AND
         fit_params = $MAD$batch_size=16, epochs=1$MAD$::text AND
         metrics_type = '{accuracy}' AND
         training_metrics_final >= 0  AND
         training_loss_final  >= 0  AND
-        array_upper(training_metrics, 1) = 2 AND
-        array_upper(training_loss, 1) = 2 AND
-        array_upper(metrics_elapsed_time, 1) = 2,
+        array_upper(training_metrics, 1) = 5 AND
+        array_upper(training_loss, 1) = 5 AND
+        array_upper(metrics_elapsed_time, 1) = 5,
         'Keras Fit Multiple Output Info Validation failed. Actual:' || __to_char(info))
 FROM (SELECT * FROM iris_multiple_model_info) info;
 
@@ -1264,6 +1269,14 @@ PERFORM assert(
 	compile_params = $MAD$loss='categorical_crossentropy', optimizer='Adam(lr=0.0001)', metrics=['accuracy']$MAD$::text,
 	'Keras Fit Multiple Output Info compile params validation failed for model 3. Actual:' || __to_char(info))
 FROM (SELECT * FROM iris_multiple_model_info WHERE mst_key=3) info;
+
+PERFORM assert(
+  training_loss[5]-training_loss[1] < 0 AND
+  training_metrics[5]-training_metrics[1] > 0,
+    'The loss and accuracy should have improved with more iterations.'
+)
+FROM iris_model_summary;
+
 
 end
 $$ LANGUAGE plpgsql VOLATILE;
