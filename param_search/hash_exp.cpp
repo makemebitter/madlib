@@ -1,6 +1,7 @@
 // Example program
 #include <iostream>
 #include <string>
+#include <unordered_map>
 typedef unsigned int uint32;
 
 /* 32 bit FNV-1  non-zero initial basis */
@@ -39,15 +40,25 @@ fnv1_32_buf(void *buf, size_t len, uint32 hval) {
 
 
 int main() {
-	for (int i = 0; i < 100; ++i) {
-		long int intbuf = (long int) i;
-		void	   *buf = NULL;
-		buf = &intbuf;
-		size_t len = sizeof(intbuf);
-		uint32 hval = fnv1_32_buf(buf, len, FNV1_32_INIT);
-		std::cout << i << ' ' << hval << ' ' << hval %  20 << std::endl;
+	std::unordered_map<int, int> buckets;
+	for (int j = 1; j < 2000; ++j){
+		for (int i = 0; i < 99999; ++i) {
+			long int intbuf = (long int) i;
+			void	   *buf = NULL;
+			buf = &intbuf;
+			size_t len = sizeof(intbuf);
+			uint32 hval = fnv1_32_buf(buf, len, FNV1_32_INIT);
+			int dist_key = hval % j;
+			buckets[dist_key] += 1;
+			// std::cout << i << ' ' << hval << ' ' << hval %  20 << std::endl;
+		}
+		if (buckets.size() != j){
+			std::cout << buckets.size() << "fail" << std::endl;
+		}
 
 	}
+	std::cout << "success";
+
 	return 0;
 
 }
