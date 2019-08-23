@@ -191,7 +191,9 @@ SELECT madlib.validation_preprocessor_dl('iris_test',          -- Source table
                                          'iris_train_packed'   -- From training preprocessor step
                                           );
 CREATE TABLE iris_test_packed_param_search as (select *, mod(row_number() over(), 3)*5  as dist_key from iris_test_packed) distributed by (dist_key);
-SELECT * FROM iris_test_packed_summary;
+CREATE TABLE iris_test_packed_param_search_summary as SELECT * FROM iris_test_packed_summary;
+
+SELECT * FROM iris_test_packed_param_search_summary;
 
 DROP TABLE IF EXISTS model_arch_library;
 SELECT madlib.load_keras_model('model_arch_library',  -- Output table,
