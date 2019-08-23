@@ -64,15 +64,18 @@ class ModelSelectionSchema:
     FIT_PARAMS = 'fit_params'
     col_types = ('SERIAL', 'INTEGER', 'VARCHAR', 'VARCHAR')
 
+
 @MinWarning("warning")
 class FitMultipleModel():
     def __init__(self, schema_madlib, source_table, model_output_table,
                  model_arch_table, model_selection_table, num_iterations,
-                 gpus_per_host=0, **kwargs):
+                 gpus_per_host=0, validation_table=None, **kwargs):
 
         if is_platform_pg():
-            plpy.error("DL: Multiple model training is not supported on Postgresql.")
+            plpy.error(
+                "DL: Multiple model training is not supported on Postgresql.")
         self.source_table = source_table
+        self.validation_table = validation_table
         self.model_arch_table = model_arch_table
         self.model_selection_table = model_selection_table
         self.model_output_table = model_output_table
@@ -107,7 +110,11 @@ class FitMultipleModel():
         self.train_mst_metric_eval_time = defaultdict(list)
         self.train_mst_loss = defaultdict(list)
         self.train_mst_metric = defaultdict(list)
-        self.mst_weights = 'mst_weights'+unique_string()
+        if self.validation_table:
+            self.valid_mst_metric_eval_time = defaultdict(list)
+            self.valid_mst_loss = defaultdict(list)
+            self.valid_mst_metric = defaultdict(list)
+        self.mst_weights = 'mst_weights' + unique_string()
         self.fit_multiple_model()
 
     def fit_multiple_model(self):
@@ -127,7 +134,6 @@ class FitMultipleModel():
         reset_cuda_env(original_cuda_env)
 
     def train_multiple_model(self):
-        self.weights_map = {}
         for e in range(self.num_iterations):
             plpy.info("Iteration: {}".format(e))
             for i in range(len(self.msts)):
@@ -135,12 +141,13 @@ class FitMultipleModel():
                            for dist_key in self.dist_keys]
                 self.create_mst_schedule_table(mst_row)
                 self.run_training()
-            self.evaluate_train_output(e)
+            self.evaluate_model(e, self.source_table, True)
+            if self.validation_table:
+                self.evaluate_model(e, self.validation_table, False)
 
-    def evaluate_train_output(self, epoch):
+    def evaluate_model(self, epoch, table, is_train):
         res = self.query_weights()
         res_map = {x['mst_key']: x['weights'] for x in res if x['weights']}
-        weights_map_one_epoch = {}
         for mst in self.msts:
             model_arch = self.query_arch(mst[self.model_arch_id_col]
                                          )[ModelArchSchema.MODEL_ARCH]
@@ -149,17 +156,25 @@ class FitMultipleModel():
                 madlib_keras_serializer.get_serialized_1d_weights_from_state(
                     state)
             loss_metric = compute_loss_and_metrics(
-                self.schema_madlib, self.source_table, "$madlib${}$madlib$".format(
-                    mst[self.compile_params_col]), model_arch,
-                serialized_weights, 0, 3, self.seg_ids_train,
+                self.schema_madlib, table, "$madlib${}$madlib$".format(
+                    mst[self.compile_params_col]),
+                model_arch,
+                serialized_weights,
+                self.gpus_per_host,
+                self.segments_per_host,
+                self.seg_ids_train,
                 self.images_per_seg_train, [], [], epoch, True)
             metric_eval_time, metric, loss = loss_metric
-            weights_map_one_epoch[mst[self.mst_key_col]] = loss_metric
-            self.train_mst_metric_eval_time[mst[self.mst_key_col]] \
-                .append(metric_eval_time)
-            self.train_mst_loss[mst[self.mst_key_col]].append(loss)
-            self.train_mst_metric[mst[self.mst_key_col]].append(metric)
-        self.weights_map[epoch] = weights_map_one_epoch
+            if is_train:
+                self.train_mst_metric_eval_time[mst[self.mst_key_col]] \
+                    .append(metric_eval_time)
+                self.train_mst_loss[mst[self.mst_key_col]].append(loss)
+                self.train_mst_metric[mst[self.mst_key_col]].append(metric)
+            else:
+                self.valid_mst_metric_eval_time[mst[self.mst_key_col]] \
+                    .append(metric_eval_time)
+                self.valid_mst_loss[mst[self.mst_key_col]].append(loss)
+                self.valid_mst_metric[mst[self.mst_key_col]].append(metric)
 
     def generate_schedule(self):
         grand_schedule = {}
@@ -247,7 +262,6 @@ class FitMultipleModel():
         for mst in self.msts:
             model_arch_result = self.query_arch(mst[self.model_arch_id_col])
             model_arch = model_arch_result[ModelArchSchema.MODEL_ARCH]
-            random.seed(42)
             serialized_weights = get_initial_weights(self.model_output_table,
                                                      model_arch_result,
                                                      False,
@@ -310,7 +324,7 @@ class FitMultipleModel():
                 CREATE TABLE {self.model_summary_table} AS
                 SELECT
                     $MAD${self.source_table}$MAD$::TEXT AS source_table,
-                    NULL::TEXT AS validation_table,
+                    $MAD${self.validation_table}$MAD$::TEXT AS validation_table,
                     $MAD${self.model_output_table}$MAD$::TEXT AS model,
                     $MAD${self.model_info_table}$MAD$::TEXT AS model_info,
                     $MAD${dependent_varname}$MAD$::TEXT AS dependent_varname,
@@ -327,38 +341,69 @@ class FitMultipleModel():
             """.format(**locals())
         plpy.execute(update_query)
 
+    def update_info_table(self, mst, is_train):
+        mst_key = mst[self.mst_key_col]
+        metrics, metrics_final, metrics_elapsed_time = \
+            "NULL", "NULL", "NULL"
+        loss_final = "NULL"
+        loss = "NULL"
+        if is_train:
+            mst_metric = self.train_mst_metric
+            mst_metric_eval_time = self.train_mst_metric_eval_time
+            mst_loss = self.train_mst_loss
+        else:
+            mst_metric = self.valid_mst_metric
+            mst_metric_eval_time = self.valid_mst_metric_eval_time
+            mst_loss = self.valid_mst_loss
+
+        if mst_key in mst_metric:
+            metrics = mst_metric[mst_key]
+            metrics_final = metrics[-1]
+            metrics_elapsed_time = mst_metric_eval_time[mst_key]
+            metrics = "ARRAY{}".format(metrics)
+            metrics_elapsed_time = "ARRAY{}".format(metrics_elapsed_time)
+        loss = mst_loss[mst_key]
+        loss_final = loss[-1]
+        loss = "ARRAY{}".format(loss)
+        if is_train:
+            update_query = """
+                               UPDATE {} SET training_metrics_final = {},
+                               training_loss_final = {},
+                               metrics_elapsed_time = {},
+                               training_metrics = {},
+                               training_loss = {}
+                               WHERE mst_key = {}
+                               """.format(self.model_info_table,
+                                          metrics_final,
+                                          loss_final,
+                                          metrics_elapsed_time,
+                                          metrics,
+                                          loss,
+                                          mst_key
+                                          )
+        else:
+            update_query = """
+                               UPDATE {} SET validation_metrics_final = {},
+                               validation_loss_final = {},
+                               metrics_elapsed_time = {},
+                               validation_metrics = {},
+                               validation_loss = {}
+                               WHERE mst_key = {}
+                               """.format(self.model_info_table,
+                                          metrics_final,
+                                          loss_final,
+                                          metrics_elapsed_time,
+                                          metrics,
+                                          loss,
+                                          mst_key
+                                          )
+        plpy.execute(update_query)
+
     def insert_info_table(self):
         for mst in self.msts:
-            mst_key = mst[self.mst_key_col]
-            training_metrics, training_metrics_final, metrics_elapsed_time = \
-                "NULL", "NULL", "NULL"
-            training_loss_final = "NULL"
-            training_loss = "NULL"
-            if mst_key in self.train_mst_metric:
-                training_metrics = self.train_mst_metric[mst_key]
-                training_metrics_final = training_metrics[-1]
-                metrics_elapsed_time = self.train_mst_metric_eval_time[mst_key]
-                training_metrics = "ARRAY{}".format(training_metrics)
-                metrics_elapsed_time = "ARRAY{}".format(metrics_elapsed_time)
-            training_loss = self.train_mst_loss[mst_key]
-            training_loss_final = training_loss[-1]
-            training_loss = "ARRAY{}".format(training_loss)
-            update_query = """
-                           UPDATE {} SET training_metrics_final = {},
-                           training_loss_final = {},
-                           metrics_elapsed_time = {},
-                           training_metrics = {},
-                           training_loss = {}
-                           WHERE mst_key = {}
-                           """.format(self.model_info_table,
-                                      training_metrics_final,
-                                      training_loss_final,
-                                      metrics_elapsed_time,
-                                      training_metrics,
-                                      training_loss,
-                                      mst_key
-                                      )
-            plpy.execute(update_query)
+            self.update_info_table(mst, True)
+            if self.validation_table:
+                self.update_info_table(mst, False)
 
     def run_training(self):
         # TODO: fix distributed by
