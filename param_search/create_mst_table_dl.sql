@@ -68,9 +68,9 @@ $$ language plpythonu;
 SELECT madlib_keras_create_mst_table_from_combination(
     'mst_table',
 	ARRAY[1],
-    ARRAY['loss=''categorical_crossentropy'', optimizer=''Adam(lr=0.1)'', metrics=[''accuracy'']',
-		  'loss=''categorical_crossentropy'', optimizer=''Adam(lr=0.01)'', metrics=[''accuracy'']',
-		  'loss=''categorical_crossentropy'', optimizer=''Adam(lr=0.001)'', metrics=[''accuracy'']'
+    ARRAY['loss=''categorical_crossentropy'', optimizer=''Adam(lr=0.001)'', metrics=[''accuracy'']',
+		  'loss=''categorical_crossentropy'', optimizer=''Adam(lr=0.0001)'', metrics=[''accuracy'']',
+		  'loss=''categorical_crossentropy'', optimizer=''Adam(lr=0.00001)'', metrics=[''accuracy'']'
 		 ],
 	ARRAY['batch_size=5, epochs=1',
 		  'batch_size=10, epochs=1'
