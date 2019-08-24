@@ -52,6 +52,8 @@ from utilities.validate_args import get_expr_type
 from utilities.validate_args import quote_ident
 from utilities.control import MinWarning
 import tensorflow as tf
+from numba import cuda
+
 
 class SD_NAMES:
     SESS = 'sess'
@@ -657,6 +659,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     if is_final_iteration and SD_NAMES.SESS not in SD:
         plpy.info("Clear session called in eval at the first row")
         tf.reset_default_graph()
+        cuda.select_device(0)
+        cuda.close()
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
