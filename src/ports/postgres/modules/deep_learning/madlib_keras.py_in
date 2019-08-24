@@ -654,7 +654,6 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # have a session.
     if is_final_iteration and SD_NAMES.SESS not in SD:
         plpy.info("Clear session called in eval at the first row")
-        K.clear_session()
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
@@ -664,6 +663,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
         SD.pop(SD_NAMES.SEGMENT_MODEL, None)
 
     if SD_NAMES.SEGMENT_MODEL in SD:
+        plpy.info('reuse model in eval')
         segment_model = SD[SD_NAMES.SEGMENT_MODEL]
         if not agg_image_count:
             model_shapes = get_model_shapes(segment_model)
@@ -671,6 +671,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
                 serialized_weights, model_shapes)
             segment_model.set_weights(model_weights)
     else:
+        plpy.info('create model in eval')
         segment_model = model_from_json(model_architecture)
         compile_and_set_weights(segment_model, compile_params, device_name,
                         serialized_weights)
