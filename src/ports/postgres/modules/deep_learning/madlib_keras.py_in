@@ -434,13 +434,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
         prev_serialized_weights = madlib_keras_serializer.\
             get_serialized_1d_weights_from_state(prev_serialized_weights)
 
-    # If a live session is present, re-use it. Otherwise, recreate it.
-    if SD_NAMES.SESS in SD:
-        sess = SD[SD_NAMES.SESS]
-    else:
-        sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
-        SD[SD_NAMES.SESS] = sess
-        K.set_session(sess)
+
 
     # Set up system if this is the first buffer on segment.
 
@@ -473,7 +467,13 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
             compile_and_set_weights(segment_model, compile_params, device_name,
                             prev_serialized_weights)
             SD[SD_NAMES.SEGMENT_MODEL] = segment_model
-
+    # If a live session is present, re-use it. Otherwise, recreate it.
+    if SD_NAMES.SESS in SD:
+        sess = SD[SD_NAMES.SESS]
+    else:
+        sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+        SD[SD_NAMES.SESS] = sess
+        K.set_session(sess)
     # Prepare the data
     x_train = np_array_float32(independent_var)
     y_train = np_array_int16(dependent_var)
@@ -510,6 +510,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
             del SD[SD_NAMES.SEGMENT_MODEL]
             del SD[SD_NAMES.SESS]
             del history
+
 
     new_state = madlib_keras_serializer.serialize_state_with_nd_weights(
         agg_image_count, updated_weights)
@@ -652,22 +653,11 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
 
     agg_loss, agg_metric, agg_image_count = state
 
-    # User called evaluate will always set is_final_iteration to true.
-    # If is_final_iteration is false, that means the fit already created a session and a graph
-    # Otherwise, we may (last iteration of fit) or may not (user evaluate call)
-    # have a session.
-    # if is_final_iteration and SD_NAMES.SESS not in SD:
-    #     plpy.info("Clear session called in eval at the first row")
-    #     tf.reset_default_graph()
-    #     cuda.select_device(0)
-    #     cuda.close()
-    #     sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
-    #     SD[SD_NAMES.SESS] = sess
-    #     K.set_session(sess)
-    #     # Popping the segment model kept in the SD of internal_keras_eval_transition,
-    #     # which is leftover from the previous iteration. But the session is already
-    #     # cleared by fit_transition at this time, so the model cannot be re-used.
-    #     SD.pop(SD_NAMES.SEGMENT_MODEL, None)
+    if is_final_iteration and SD_NAMES.SESS not in SD:
+        # Popping the segment model kept in the SD of internal_keras_eval_transition,
+        # which is leftover from the previous iteration. But the session is already
+        # cleared by fit_transition at this time, so the model cannot be re-used.
+        SD.pop(SD_NAMES.SEGMENT_MODEL, None)
 
     if SD_NAMES.SEGMENT_MODEL in SD:
         plpy.info('reuse model in eval')
@@ -683,6 +673,16 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
         compile_and_set_weights(segment_model, compile_params, device_name,
                         serialized_weights)
         SD[SD_NAMES.SEGMENT_MODEL] = segment_model
+
+
+    # User called evaluate will always set is_final_iteration to true.
+    # If is_final_iteration is false, that means the fit already created a session and a graph
+    # Otherwise, we may (last iteration of fit) or may not (user evaluate call)
+    # have a session.
+    if is_final_iteration and SD_NAMES.SESS not in SD:
+        sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+        SD[SD_NAMES.SESS] = sess
+        K.set_session(sess)
 
     if not agg_image_count:
         # These should already be 0, but just in case make sure
