@@ -643,7 +643,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     SD = kwargs['SD']
     device_name = get_device_name_and_set_cuda_env(gpus_per_host, current_seg_id)
     if not is_final_iteration:
-        plpy.error("Is final iteration set to false")
+        plpy.info("Is final iteration set to false")
     else:
         plpy.info("Is final set to True in eval")
 
