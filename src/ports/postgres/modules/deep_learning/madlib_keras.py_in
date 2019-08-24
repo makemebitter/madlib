@@ -458,8 +458,10 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     # On single model fit, reuse the model if it exists
     else:
         if SD_NAMES.SEGMENT_MODEL in SD:
+            plpy.info("SD has segment model")
             segment_model = SD[SD_NAMES.SEGMENT_MODEL]
             if not state:
+                plpy.info("Load new weights into segment model")
                 model_shapes = get_model_shapes(segment_model)
                 model_weights = madlib_keras_serializer.deserialize_as_nd_weights(
                     prev_serialized_weights, model_shapes)
@@ -654,6 +656,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # have a session.
     if is_final_iteration and SD_NAMES.SESS not in SD:
         plpy.info("Clear session called in eval at the first row")
+        tf.reset_default_graph()
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
