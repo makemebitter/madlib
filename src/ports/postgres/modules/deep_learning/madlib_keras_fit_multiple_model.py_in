@@ -170,7 +170,7 @@ class FitMultipleModel():
                     mst[self.compile_params_col]),
                 model_arch,
                 serialized_weights,
-                self.gpus_per_host,
+                0,
                 self.segments_per_host,
                 seg_ids,
                 images_per_seg, [], [], epoch, True)
