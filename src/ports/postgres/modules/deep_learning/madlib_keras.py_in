@@ -506,6 +506,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
             sess.close()
             del SD[SD_NAMES.SEGMENT_MODEL]
             del SD[SD_NAMES.SESS]
+            del history
 
     new_state = madlib_keras_serializer.serialize_state_with_nd_weights(
         agg_image_count, updated_weights)
@@ -653,7 +654,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # Otherwise, we may (last iteration of fit) or may not (user evaluate call)
     # have a session.
     if is_final_iteration and SD_NAMES.SESS not in SD:
-        plpy.info("Clear session called in eval")
+        plpy.info("Clear session called in eval at the first row")
         K.clear_session()
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
@@ -706,6 +707,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
 
     # Clean the session on the last buffer of last iteration
     if agg_image_count == total_images and is_final_iteration:
+        plpy.info("Clear session called in eval at the last row")
         K.clear_session()
         SD[SD_NAMES.SESS].close()
         del SD[SD_NAMES.SEGMENT_MODEL]
