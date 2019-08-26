@@ -542,6 +542,12 @@ def fit_merge(state1, state2, **kwargs):
     return madlib_keras_serializer.serialize_state_with_1d_weights(
         image_count, total_weights)
 
+def fit_merge_multiple_model(state1, state2, **kwargs):
+    return None
+
+def fit_final_multiple_model(state, **kwargs):
+    return None
+
 def fit_final(state, **kwargs):
     # Return if called early
     if not state:
