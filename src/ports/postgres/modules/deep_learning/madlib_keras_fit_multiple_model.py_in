@@ -151,7 +151,7 @@ class FitMultipleModel():
             loss_metric = compute_loss_and_metrics(
                 self.schema_madlib, self.source_table, "$madlib${}$madlib$".format(
                     mst[self.compile_params_col]), model_arch,
-                serialized_weights, 0, 3, self.seg_ids_train,
+                serialized_weights, self.gpus_per_host, self.segments_per_host, self.seg_ids_train,
                 self.images_per_seg_train, [], [], epoch, True)
             metric_eval_time, metric, loss = loss_metric
             weights_map_one_epoch[mst[self.mst_key_col]] = loss_metric
