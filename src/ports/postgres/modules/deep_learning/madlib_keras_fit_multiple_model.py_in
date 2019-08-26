@@ -124,9 +124,9 @@ class FitMultipleModel():
         begin_time = time.time()
         # WARNING: set orca off to prevent unwanted redistribution
         with OptimizerControl(False):
-            original_cuda_env = None
-            if CUDA_VISIBLE_DEVICES_KEY in os.environ:
-                original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
+            # original_cuda_env = None
+            # if CUDA_VISIBLE_DEVICES_KEY in os.environ:
+            #     original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
             self.start_training_time = datetime.datetime.now()
             self.train_multiple_model()
             self.end_training_time = datetime.datetime.now()
@@ -134,7 +134,7 @@ class FitMultipleModel():
             self.create_model_summary_table()
         plpy.info(
             "End to end execution time: {}".format(time.time() - begin_time))
-        reset_cuda_env(original_cuda_env)
+        # reset_cuda_env(original_cuda_env)
 
     def train_multiple_model(self):
         for e in range(self.num_iterations):

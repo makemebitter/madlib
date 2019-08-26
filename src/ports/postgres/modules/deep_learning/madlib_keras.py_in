@@ -501,10 +501,14 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
         # In GPDB, each segment would have a keras session, so clear
         # them at the end of final iteration and also every final buffer for cerebro
         if is_final_iteration or is_multiple_model:
+            plpy.info("{}: Clearing session at the end of fit_transition".format(current_seg_id))
+            print_graph()
             K.clear_session()
             sess.close()
             del SD[SD_NAMES.SEGMENT_MODEL]
             del SD[SD_NAMES.SESS]
+            # print_graph()
+
 
     new_state = madlib_keras_serializer.serialize_state_with_nd_weights(
         agg_image_count, updated_weights)
@@ -515,6 +519,10 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
 
     return new_state
 
+def print_graph():
+    tf_graph_count = len([n.name for n in tf.get_default_graph().as_graph_def().node])
+    keras_graph_count = len([n.name for n in K.get_session().graph.as_graph_def().node])
+    plpy.info("Size of tf default graph:{}, keras graph:{}".format(tf_graph_count,keras_graph_count))
 def fit_merge(state1, state2, **kwargs):
 
     # Return if called early
@@ -639,7 +647,13 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
                                    gpus_per_host, segments_per_host,
                                    is_final_iteration, **kwargs):
     SD = kwargs['SD']
+    plpy.info('beginning of keras eval transition')
     device_name = get_device_name_and_set_cuda_env(gpus_per_host, current_seg_id)
+    plpy.info("CUDA visiablity:{}".format(os.environ[CUDA_VISIBLE_DEVICES_KEY]))
+    plpy.info("Type of CUDA visiability{}".format(type(os.environ[CUDA_VISIBLE_DEVICES_KEY])))
+    from tensorflow.python.client import device_lib
+    vis_ls = device_lib.list_local_devices()
+    plpy.info("Visiable GPUS: {}".format(vis_ls))
     if not is_final_iteration:
         plpy.error("Is final iteration set to false")
 
@@ -657,7 +671,6 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
         # which is leftover from the previous iteration. But the session is already
         # cleared by fit_transition at this time, so the model cannot be re-used.
         SD.pop(SD_NAMES.SEGMENT_MODEL, None)
-
     if SD_NAMES.SEGMENT_MODEL in SD:
         segment_model = SD[SD_NAMES.SEGMENT_MODEL]
         if not agg_image_count:
@@ -679,6 +692,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     x_val = np_array_float32(independent_var)
     y_val = np_array_int16(dependent_var)
 
+    plpy.info('calling keras.evaluate')
+    # print_graph()
     with K.tf.device(device_name):
         res = segment_model.evaluate(x_val, y_val)
 
