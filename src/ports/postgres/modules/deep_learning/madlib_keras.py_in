@@ -543,10 +543,10 @@ def fit_merge(state1, state2, **kwargs):
         image_count, total_weights)
 
 def fit_merge_multiple_model(state1, state2, **kwargs):
-    return None
+    return -1
 
 def fit_final_multiple_model(state, **kwargs):
-    return None
+    return -1
 
 def fit_final(state, **kwargs):
     # Return if called early
