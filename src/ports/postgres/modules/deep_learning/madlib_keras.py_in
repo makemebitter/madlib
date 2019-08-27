@@ -665,8 +665,10 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # Otherwise, we may (last iteration of fit) or may not (user evaluate call)
     # have a session.
     if is_final_iteration and SD_NAMES.SESS not in SD:
-        # sess = K.get_session()
-        sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+        plpy.info("tf default session:{}".format(tf.get_default_session()))
+        sess = K.get_session()
+        plpy.info("Keras default session:{}".format(sess)
+        # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
         # Popping the segment model kept in the SD of internal_keras_eval_transition,
