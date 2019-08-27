@@ -652,7 +652,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # plpy.info("CUDA visiablity:{}".format(os.environ[CUDA_VISIBLE_DEVICES_KEY]))
     # plpy.info("Type of CUDA visiability{}".format(type(os.environ[CUDA_VISIBLE_DEVICES_KEY])))
     from tensorflow.python.client import device_lib
-    vis_ls = device_lib.list_local_devices()
+    # vis_ls = device_lib.list_local_devices()
     # plpy.info("Visiable GPUS: {}".format(vis_ls))
     # if not is_final_iteration:
     #     plpy.error("Is final iteration set to false")
