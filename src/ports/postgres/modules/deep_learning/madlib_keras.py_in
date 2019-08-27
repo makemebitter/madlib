@@ -52,7 +52,7 @@ from utilities.validate_args import get_expr_type
 from utilities.validate_args import quote_ident
 from utilities.control import MinWarning
 import tensorflow as tf
-
+import time
 class SD_NAMES:
     SESS = 'sess'
     SEGMENT_MODEL = 'segment_model'
@@ -651,8 +651,9 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     device_name = get_device_name_and_set_cuda_env(gpus_per_host, current_seg_id)
     # plpy.info("CUDA visiablity:{}".format(os.environ[CUDA_VISIBLE_DEVICES_KEY]))
     # plpy.info("Type of CUDA visiability{}".format(type(os.environ[CUDA_VISIBLE_DEVICES_KEY])))
-    from tensorflow.python.client import device_lib
-    vis_ls = device_lib.list_local_devices()
+    # from tensorflow.python.client import device_lib
+    # vis_ls = device_lib.list_local_devices()
+    time.sleep(5)
     # plpy.info("Visiable GPUS: {}".format(vis_ls))
     # if not is_final_iteration:
     #     plpy.error("Is final iteration set to false")
