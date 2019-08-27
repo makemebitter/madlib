@@ -505,11 +505,11 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
             # plpy.info("{}: Clearing session at the end of fit_transition".format(current_seg_id))
             # print_graph()
             K.clear_session()
-            sess.close()
+            # sess.close()
             # K.get_session().close()
             # K.set_session(None)
             del SD[SD_NAMES.SEGMENT_MODEL]
-            del SD[SD_NAMES.SESS]
+            # del SD[SD_NAMES.SESS]
             # print_graph()
 
 
@@ -667,22 +667,27 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # If is_final_iteration is false, that means the fit already created a session and a graph
     # Otherwise, we may (last iteration of fit) or may not (user evaluate call)
     # have a session.
-
-
-    if is_final_iteration and SD_NAMES.SESS not in SD:
-        # sess = K.get_session()
+    if SD_NAMES.SESS in SD:
+        sess = SD[SD_NAMES.SESS]
+    else:
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
-
-        # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
-        # Popping the segment model kept in the SD of internal_keras_eval_transition,
-        # which is leftover from the previous iteration. But the session is already
-        # cleared by fit_transition at this time, so the model cannot be re-used.
-        SD.pop(SD_NAMES.SEGMENT_MODEL, None)
-    else:
-        # sess = K.get_session()
-        sess = SD[SD_NAMES.SESS]
+
+    # if is_final_iteration and SD_NAMES.SESS not in SD:
+    #     # sess = K.get_session()
+    #     sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+
+    #     # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+    #     SD[SD_NAMES.SESS] = sess
+    #     K.set_session(sess)
+    #     # Popping the segment model kept in the SD of internal_keras_eval_transition,
+    #     # which is leftover from the previous iteration. But the session is already
+    #     # cleared by fit_transition at this time, so the model cannot be re-used.
+    #     SD.pop(SD_NAMES.SEGMENT_MODEL, None)
+    # else:
+    #     # sess = K.get_session()
+    #     sess = SD[SD_NAMES.SESS]
 
     if SD_NAMES.SEGMENT_MODEL in SD:
         segment_model = SD[SD_NAMES.SEGMENT_MODEL]
