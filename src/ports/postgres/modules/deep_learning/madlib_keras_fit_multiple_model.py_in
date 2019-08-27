@@ -141,6 +141,7 @@ class FitMultipleModel():
             weights bytea,
             model_arch json
             )
+            DISTRIBUTED BY (dist_key)
         """.format(**locals())
         plpy.execute(mst_create_weights_query)
 
@@ -475,7 +476,7 @@ class FitMultipleModel():
                     ON mst.mst_key = wgh.mst_key
                         JOIN {self.model_arch_table} model_arch
                         ON mst.model_arch_id = model_arch.model_id
-                DISTRIBUTED BY (dist_key)
+            -- DISTRIBUTED BY (dist_key)
         """.format(**locals())
         plpy.execute(mst_weights_query)
         # WARNING weights_one_schedule.weights is the state returned by
