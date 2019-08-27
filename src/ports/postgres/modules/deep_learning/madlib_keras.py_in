@@ -504,7 +504,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
             plpy.info("{}: Clearing session at the end of fit_transition".format(current_seg_id))
             # print_graph()
             K.clear_session()
-            sess.close()
+            # sess.close()
             del SD[SD_NAMES.SEGMENT_MODEL]
             del SD[SD_NAMES.SESS]
             # print_graph()
@@ -653,7 +653,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # plpy.info("Type of CUDA visiability{}".format(type(os.environ[CUDA_VISIBLE_DEVICES_KEY])))
     # from tensorflow.python.client import device_lib
     # vis_ls = device_lib.list_local_devices()
-    K.get_session()
+    # K.get_session()
     # plpy.info("Visiable GPUS: {}".format(vis_ls))
     # if not is_final_iteration:
     #     plpy.error("Is final iteration set to false")
@@ -718,7 +718,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # Clean the session on the last buffer of last iteration
     if agg_image_count == total_images and is_final_iteration:
         K.clear_session()
-        SD[SD_NAMES.SESS].close()
+        # SD[SD_NAMES.SESS].close()
         del SD[SD_NAMES.SEGMENT_MODEL]
         del SD[SD_NAMES.SESS]
 
