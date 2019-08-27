@@ -127,6 +127,23 @@ class FitMultipleModel():
             self.valid_mst_loss = defaultdict(list)
             self.valid_mst_metric = defaultdict(list)
         self.mst_weights = 'mst_weights' + unique_string()
+
+
+        mst_create_weights_query = """
+            DROP TABLE IF EXISTS {self.mst_weights};
+            CREATE TEMP TABLE {self.mst_weights}
+            (
+            model_arch_id INTEGER,
+            compile_params VARCHAR,
+            fit_params VARCHAR,
+            dist_key INTEGER,
+            mst_key INTEGER primary key,
+            weights bytea,
+            model_arch json
+            )
+        """.format(**locals())
+        plpy.execute(mst_create_weights_query)
+
         mlp_uda_query = """
             UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
             FROM (SELECT {self.schema_madlib}.fit_step_multiple_model({mb_dep_var_col},
@@ -173,6 +190,7 @@ class FitMultipleModel():
         # reset_cuda_env(original_cuda_env)
 
     def train_multiple_model(self):
+
         for e in range(self.num_iterations):
             plpy.info("Iteration: {}".format(e))
             for i in range(len(self.msts)):
@@ -447,8 +465,10 @@ class FitMultipleModel():
     def run_training(self):
         # TODO: fix distributed by
         mst_weights_query = """
-            DROP TABLE IF EXISTS {self.mst_weights};
-            CREATE TEMP TABLE {self.mst_weights} AS
+            -- DROP TABLE IF EXISTS {self.mst_weights};
+            -- CREATE TEMP TABLE {self.mst_weights} AS
+            TRUNCATE TABLE {self.mst_weights};
+            INSERT INTO {self.mst_weights}
                 SELECT mst.*, wgh.weights, model_arch.model_arch
                 FROM
                     mst_current_schedule mst JOIN {self.model_output_table} wgh
