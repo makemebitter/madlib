@@ -502,7 +502,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
         # them at the end of final iteration and also every final buffer for cerebro
         if is_final_iteration or is_multiple_model:
             plpy.info("{}: Clearing session at the end of fit_transition".format(current_seg_id))
-            print_graph()
+            # print_graph()
             K.clear_session()
             sess.close()
             del SD[SD_NAMES.SEGMENT_MODEL]
