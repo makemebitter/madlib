@@ -436,7 +436,8 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     if SD_NAMES.SESS in SD:
         sess = SD[SD_NAMES.SESS]
     else:
-        sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+        sess = K.get_session()
+        # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
 
@@ -446,6 +447,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     agg_image_count = madlib_keras_serializer.get_image_count_from_state(state)
     if is_multiple_model:
         if not state:
+            K.clear_session()
             segment_model = model_from_json(model_architecture)
             compile_and_set_weights(segment_model, compile_params, device_name,
                     prev_serialized_weights)
