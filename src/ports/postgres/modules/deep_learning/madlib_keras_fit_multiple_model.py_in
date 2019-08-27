@@ -131,7 +131,7 @@ class FitMultipleModel():
 
         mst_create_weights_query = """
             DROP TABLE IF EXISTS {self.mst_weights};
-            CREATE TEMP TABLE {self.mst_weights}
+            CREATE TABLE {self.mst_weights}
             (
             model_arch_id INTEGER,
             compile_params VARCHAR,
