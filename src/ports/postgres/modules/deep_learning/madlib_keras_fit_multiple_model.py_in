@@ -127,6 +127,33 @@ class FitMultipleModel():
             self.valid_mst_loss = defaultdict(list)
             self.valid_mst_metric = defaultdict(list)
         self.mst_weights = 'mst_weights' + unique_string()
+        mlp_uda_query = """
+            UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
+            FROM (SELECT {self.schema_madlib}.fit_step_multiple_model({mb_dep_var_col},
+                                                      {mb_indep_var_col},
+                                                      {self.mst_weights}.model_arch::TEXT,
+                                                      {self.mst_weights}.compile_params::TEXT,
+                                                      {self.mst_weights}.fit_params::TEXT,
+                                                      iris.gp_segment_id,
+                                                      ARRAY{self.seg_ids_train},
+                                                      ARRAY{self.images_per_seg_train},
+                                                      {self.gpus_per_host},
+                                                      {self.segments_per_host},
+                                                      {self.mst_weights}.weights::BYTEA,
+                                                      {is_final_iteration}::BOOLEAN
+                                                      )::BYTEA AS weights,
+                {self.mst_weights}.mst_key AS mst_key
+                FROM {self.source_table} iris JOIN {self.mst_weights}
+                USING (dist_key)
+                GROUP BY iris.dist_key, {self.mst_weights}.mst_key
+                ) weights_one_schedule
+            WHERE {self.model_output_table}.mst_key = weights_one_schedule.mst_key
+            """.format(mb_dep_var_col=mb_dep_var_col,
+                        mb_indep_var_col=mb_indep_var_col,
+                        is_final_iteration=True,
+                        self=self
+                       )
+        self.mlp_uda_query_plan = plpy.prepare(mlp_uda_query)
         self.fit_multiple_model()
 
     def fit_multiple_model(self):
@@ -433,34 +460,8 @@ class FitMultipleModel():
         plpy.execute(mst_weights_query)
         # WARNING weights_one_schedule.weights is the state returned by
         # the step function, which is img_count and weights concatnated
-        mlp_uda_query = """
-            UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
-            FROM (SELECT {self.schema_madlib}.fit_step_multiple_model({mb_dep_var_col},
-                                                      {mb_indep_var_col},
-                                                      {self.mst_weights}.model_arch::TEXT,
-                                                      {self.mst_weights}.compile_params::TEXT,
-                                                      {self.mst_weights}.fit_params::TEXT,
-                                                      iris.gp_segment_id,
-                                                      ARRAY{self.seg_ids_train},
-                                                      ARRAY{self.images_per_seg_train},
-                                                      {self.gpus_per_host},
-                                                      {self.segments_per_host},
-                                                      {self.mst_weights}.weights::BYTEA,
-                                                      {is_final_iteration}::BOOLEAN
-                                                      )::BYTEA AS weights,
-                {self.mst_weights}.mst_key AS mst_key
-                FROM {self.source_table} iris JOIN {self.mst_weights}
-                USING (dist_key)
-                GROUP BY iris.dist_key, {self.mst_weights}.mst_key
-                ) weights_one_schedule
-            WHERE {self.model_output_table}.mst_key = weights_one_schedule.mst_key
-            """.format(mb_dep_var_col=mb_dep_var_col,
-                        mb_indep_var_col=mb_indep_var_col,
-                        is_final_iteration=True,
-                        self=self
-                       )
-        mlp_uda_query_plan = plpy.prepare(mlp_uda_query)
-        plpy.execute(mlp_uda_query_plan)
+
+        plpy.execute(self.mlp_uda_query_plan)
         plpy.execute("DROP TABLE IF EXISTS {0}".format(self.mst_weights))
 
     def query_weights(self):
