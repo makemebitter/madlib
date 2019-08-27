@@ -137,7 +137,7 @@ class FitMultipleModel():
             compile_params VARCHAR,
             fit_params VARCHAR,
             dist_key INTEGER,
-            mst_key INTEGER primary key,
+            mst_key INTEGER,
             weights bytea,
             model_arch json
             )
