@@ -664,11 +664,13 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # If is_final_iteration is false, that means the fit already created a session and a graph
     # Otherwise, we may (last iteration of fit) or may not (user evaluate call)
     # have a session.
+
+
     if is_final_iteration and SD_NAMES.SESS not in SD:
-        plpy.info("tf default session:{}".format(tf.get_default_session()))
+
         # sess = K.get_session()
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
-        plpy.info("Keras default session:{}".format(sess))
+
         # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
@@ -693,6 +695,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
         # These should already be 0, but just in case make sure
         agg_metric = 0
         agg_loss = 0
+    plpy.info("Keras default session:{}".format(sess))
+    plpy.info("tf default session:{}".format(tf.get_default_session()))
 
     x_val = np_array_float32(independent_var)
     y_val = np_array_int16(dependent_var)
