@@ -506,6 +506,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
             # print_graph()
             K.clear_session()
             K.get_session().close()
+            K.session(None)
             del SD[SD_NAMES.SEGMENT_MODEL]
             del SD[SD_NAMES.SESS]
             # print_graph()
@@ -727,6 +728,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     if agg_image_count == total_images and is_final_iteration:
         K.clear_session()
         K.get_session().close()
+        K.session(None)
         # sess_tmp.close()
         del SD[SD_NAMES.SEGMENT_MODEL]
         del SD[SD_NAMES.SESS]
