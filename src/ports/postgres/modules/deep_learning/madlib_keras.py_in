@@ -53,6 +53,8 @@ from utilities.validate_args import quote_ident
 from utilities.control import MinWarning
 import tensorflow as tf
 import time
+# from keras.backend.tensorflow_backend import _SESSION
+
 class SD_NAMES:
     SESS = 'sess'
     SEGMENT_MODEL = 'segment_model'
@@ -431,9 +433,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     if is_multiple_model:
         prev_serialized_weights = madlib_keras_serializer.\
             get_serialized_1d_weights_from_state(prev_serialized_weights)
-    from K.tensorflow_backend import _SESSION
-    global _SESSION
-    plpy.info("Keras default session:{}".format(_SESSION))
+    plpy.info("Keras default session:{}".format(K.get_k_session())
     # If a live session is present, re-use it. Otherwise, recreate it.
     if SD_NAMES.SESS in SD:
         sess = SD[SD_NAMES.SESS]
