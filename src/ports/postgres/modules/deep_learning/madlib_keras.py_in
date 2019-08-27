@@ -501,7 +501,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
         # In GPDB, each segment would have a keras session, so clear
         # them at the end of final iteration and also every final buffer for cerebro
         if is_final_iteration or is_multiple_model:
-            plpy.info("{}: Clearing session at the end of fit_transition".format(current_seg_id))
+            # plpy.info("{}: Clearing session at the end of fit_transition".format(current_seg_id))
             # print_graph()
             K.clear_session()
             sess.close()
@@ -667,7 +667,6 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
 
 
     if is_final_iteration and SD_NAMES.SESS not in SD:
-
         # sess = K.get_session()
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
 
@@ -701,7 +700,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     x_val = np_array_float32(independent_var)
     y_val = np_array_int16(dependent_var)
 
-    plpy.info('calling keras.evaluate')
+    # plpy.info('calling keras.evaluate')
     # print_graph()
     with K.tf.device(device_name):
         res = segment_model.evaluate(x_val, y_val)

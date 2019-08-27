@@ -444,7 +444,7 @@ class FitMultipleModel():
                 USING (dist_key)
                 GROUP BY iris.dist_key, {self.mst_weights}.mst_key
                 ) weights_one_schedule
-            WHERE {self.model_output_table}.mst_key = weights_one_schedule.mst_key
+            -- WHERE {self.model_output_table}.mst_key = weights_one_schedule.mst_key
             """.format(mb_dep_var_col=mb_dep_var_col,
                         mb_indep_var_col=mb_indep_var_col,
                         is_final_iteration=True,
