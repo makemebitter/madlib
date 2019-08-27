@@ -440,7 +440,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
         # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
-
+    plpy.info("Session in fit_transition:{}".format(sess))
     # Set up system if this is the first buffer on segment.
 
     # On model hopper training, clean the session on the first row.
@@ -506,7 +506,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
             # print_graph()
             K.clear_session()
             K.get_session().close()
-            K.set_session(None)
+            # K.set_session(None)
             del SD[SD_NAMES.SEGMENT_MODEL]
             del SD[SD_NAMES.SESS]
             # print_graph()
@@ -679,6 +679,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
         # which is leftover from the previous iteration. But the session is already
         # cleared by fit_transition at this time, so the model cannot be re-used.
         SD.pop(SD_NAMES.SEGMENT_MODEL, None)
+    else:
+        sess = K.get_session()
     if SD_NAMES.SEGMENT_MODEL in SD:
         segment_model = SD[SD_NAMES.SEGMENT_MODEL]
         if not agg_image_count:
@@ -728,7 +730,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     if agg_image_count == total_images and is_final_iteration:
         K.clear_session()
         K.get_session().close()
-        K.set_session(None)
+        # K.set_session(None)
         # sess_tmp.close()
         del SD[SD_NAMES.SEGMENT_MODEL]
         del SD[SD_NAMES.SESS]
