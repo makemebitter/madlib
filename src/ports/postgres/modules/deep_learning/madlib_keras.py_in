@@ -720,10 +720,10 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     if agg_image_count == total_images and is_final_iteration:
         K.clear_session()
         SD[SD_NAMES.SESS].close()
-        sess_tmp.close()
+        # sess_tmp.close()
         del SD[SD_NAMES.SEGMENT_MODEL]
         del SD[SD_NAMES.SESS]
-        del sess_tmp
+        # del sess_tmp
 
     state[0] = agg_loss
     state[1] = agg_metric
