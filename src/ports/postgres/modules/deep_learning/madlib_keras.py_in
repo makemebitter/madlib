@@ -653,7 +653,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # plpy.info("Type of CUDA visiability{}".format(type(os.environ[CUDA_VISIBLE_DEVICES_KEY])))
     # from tensorflow.python.client import device_lib
     # vis_ls = device_lib.list_local_devices()
-    sess_tmp = K.get_session()
+    # sess_tmp = K.get_session()
     # plpy.info("Visiable GPUS: {}".format(vis_ls))
     # if not is_final_iteration:
     #     plpy.error("Is final iteration set to false")
@@ -665,7 +665,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # Otherwise, we may (last iteration of fit) or may not (user evaluate call)
     # have a session.
     if is_final_iteration and SD_NAMES.SESS not in SD:
-        sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+        sess = K.get_session()
+        # get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
         # Popping the segment model kept in the SD of internal_keras_eval_transition,
