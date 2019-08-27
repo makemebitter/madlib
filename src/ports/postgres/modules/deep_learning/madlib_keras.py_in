@@ -431,7 +431,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     if is_multiple_model:
         prev_serialized_weights = madlib_keras_serializer.\
             get_serialized_1d_weights_from_state(prev_serialized_weights)
-    plpy.info("Keras default session:{}".format(K._SESSION))
+    plpy.info("Keras default session:{}".format(K.tensorflow_backend._SESSION))
     # If a live session is present, re-use it. Otherwise, recreate it.
     if SD_NAMES.SESS in SD:
         sess = SD[SD_NAMES.SESS]
