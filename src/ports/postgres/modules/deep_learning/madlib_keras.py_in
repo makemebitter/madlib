@@ -433,7 +433,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     if is_multiple_model:
         prev_serialized_weights = madlib_keras_serializer.\
             get_serialized_1d_weights_from_state(prev_serialized_weights)
-    plpy.info("Keras default session:{}".format(K.get_k_session()))
+    # plpy.info("Keras default session:{}".format(K.get_k_session()))
     # If a live session is present, re-use it. Otherwise, recreate it.
     if SD_NAMES.SESS in SD:
         sess = SD[SD_NAMES.SESS]
@@ -442,7 +442,9 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
-    plpy.info("Session in fit_transition:{}".format(sess))
+    plpy.info("Fit_transition Session in sess:{}".format(sess))
+    plpy.info("Fit_transition Session in sd:{}".format(SD[SD_NAMES.SESS]))
+    plpy.info("Fit_transition Session in keras:{}".format(K.get_session()))
     # Set up system if this is the first buffer on segment.
 
     # On model hopper training, clean the session on the first row.
@@ -708,8 +710,9 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
         # These should already be 0, but just in case make sure
         agg_metric = 0
         agg_loss = 0
-    plpy.info("Keras default session:{}".format(sess))
-    plpy.info("tf default session:{}".format(tf.get_default_session()))
+    plpy.info("eval_transition Session in sess:{}".format(sess))
+    plpy.info("eval_transition Session in sd:{}".format(SD[SD_NAMES.SESS]))
+    plpy.info("eval_transition Session in keras:{}".format(K.get_session()))
 
     x_val = np_array_float32(independent_var)
     y_val = np_array_int16(dependent_var)
