@@ -65,11 +65,20 @@ class ModelSelectionSchema:
     col_types = ('SERIAL', 'INTEGER', 'VARCHAR', 'VARCHAR')
 
 
+def pl_wrapper_multiple_model(schema_madlib, source_table, model_output_table,
+                              model_arch_table, model_selection_table, num_iterations,
+                              gpus_per_host=0, validation_table=None, **kwargs):
+    plpy.info(kwargs)
+    FitMultipleModel(schema_madlib, source_table, model_output_table,
+                     model_arch_table, model_selection_table, num_iterations,
+                     gpus_per_host, validation_table)
+
+
 @MinWarning("warning")
 class FitMultipleModel():
     def __init__(self, schema_madlib, source_table, model_output_table,
                  model_arch_table, model_selection_table, num_iterations,
-                 gpus_per_host=0, validation_table=None, **kwargs):
+                 gpus_per_host=0, validation_table=None):
         # FIXME seed should be input, should also control randomness in np, tf,
         # keras and python environment
         random.seed(1)
@@ -124,9 +133,9 @@ class FitMultipleModel():
         begin_time = time.time()
         # WARNING: set orca off to prevent unwanted redistribution
         # with OptimizerControl(False):
-            # original_cuda_env = None
-            # if CUDA_VISIBLE_DEVICES_KEY in os.environ:
-            #     original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
+        # original_cuda_env = None
+        # if CUDA_VISIBLE_DEVICES_KEY in os.environ:
+        #     original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
         self.start_training_time = datetime.datetime.now()
         self.train_multiple_model()
         self.end_training_time = datetime.datetime.now()
