@@ -87,9 +87,9 @@ def fit(schema_madlib, source_table, model, model_arch_table,
 
     # TODO add a unit test for this in a future PR
     # save the original value of the env variable so that we can reset it later.
-    original_cuda_env = None
-    if CUDA_VISIBLE_DEVICES_KEY in os.environ:
-        original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
+    # original_cuda_env = None
+    # if CUDA_VISIBLE_DEVICES_KEY in os.environ:
+        # original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
 
     # Get the serialized master model
     start_deserialization = time.time()
@@ -294,7 +294,7 @@ def fit(schema_madlib, source_table, model, model_arch_table,
     plpy.execute(create_output_table, [serialized_weights, model_arch])
 
     # TODO add a unit test for this in a future PR
-    reset_cuda_env(original_cuda_env)
+    # reset_cuda_env(original_cuda_env)
 
 
 def get_initial_weights(model_table, model_arch_result, warm_start, gpus_per_host):
