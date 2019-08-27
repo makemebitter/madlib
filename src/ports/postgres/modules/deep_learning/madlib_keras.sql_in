@@ -1527,7 +1527,7 @@ CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.madlib_keras_fit_multiple_model(
 ) RETURNS VOID AS $$
     PythonFunctionBodyOnly(`deep_learning', `madlib_keras_fit_multiple_model')
     with AOControl(False):
-        pl_wrapper_multiple_model(**globals())
+        madlib_keras_fit_multiple_model.pl_wrapper_multiple_model(**globals())
 $$ LANGUAGE plpythonu VOLATILE
 m4_ifdef(`__HAS_FUNCTION_PROPERTIES__', `MODIFIES SQL DATA', `');
 
