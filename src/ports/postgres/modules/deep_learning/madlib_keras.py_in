@@ -436,8 +436,8 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     if SD_NAMES.SESS in SD:
         sess = SD[SD_NAMES.SESS]
     else:
-        sess = K.get_session()
-        # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+        # sess = K.get_session()
+        sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
         K.set_session(sess)
     plpy.info("Session in fit_transition:{}".format(sess))
@@ -669,8 +669,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
 
 
     if is_final_iteration and SD_NAMES.SESS not in SD:
-        sess = K.get_session()
-        # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+        # sess = K.get_session()
+        sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
 
         # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
