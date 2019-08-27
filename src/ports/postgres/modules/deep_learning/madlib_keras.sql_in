@@ -1630,9 +1630,7 @@ CREATE AGGREGATE MADLIB_SCHEMA.fit_step(
     /* is_final_iteration */     BOOLEAN
 )(
     STYPE=BYTEA,
-    SFUNC=MADLIB_SCHEMA.fit_transition,
-    m4_ifdef(`__POSTGRESQL__', `', `prefunc=MADLIB_SCHEMA.fit_merge,')
-    FINALFUNC=MADLIB_SCHEMA.fit_final
+    SFUNC=MADLIB_SCHEMA.fit_transition
 );
 
 CREATE AGGREGATE MADLIB_SCHEMA.fit_step_multiple_model(
