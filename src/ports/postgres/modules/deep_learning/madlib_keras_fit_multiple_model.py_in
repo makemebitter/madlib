@@ -450,7 +450,8 @@ class FitMultipleModel():
                         is_final_iteration=True,
                         self=self
                        )
-        plpy.execute(mlp_uda_query)
+        mlp_uda_query_plan = plpy.prepare(mlp_uda_query)
+        plpy.execute(mlp_uda_query_plan)
         plpy.execute("DROP TABLE IF EXISTS {0}".format(self.mst_weights))
 
     def query_weights(self):
