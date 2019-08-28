@@ -158,8 +158,8 @@ def fit(schema_madlib, source_table, model, model_arch_table,
         # iteration_result = plpy.execute(run_training_iteration,
         #                                 [serialized_weights, is_final_iteration])[0]['iteration_result']
         # end_iteration = time.time()
-        # info_str = "\tTime for training in iteration {0}: {1} sec".format(i,
-        #     end_iteration - start_iteration)
+        info_str = "\tTime for training in iteration {0}: {1} sec".format(i,
+            end_iteration - start_iteration)
         # serialized_weights = madlib_keras_serializer.\
         #     get_serialized_1d_weights_from_state(iteration_result)
 
