@@ -705,7 +705,9 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # else:
     #     # sess = K.get_session()
     #     sess = SD[SD_NAMES.SESS]
-
+    plpy.info("eval_transition Session in sess:{}".format(sess))
+    plpy.info("eval_transition Session in sd:{}".format(SD[SD_NAMES.SESS]))
+    plpy.info("eval_transition Session in keras:{}".format(K.get_session()))
     if SD_NAMES.SEGMENT_MODEL in SD:
         segment_model = SD[SD_NAMES.SEGMENT_MODEL]
         if not agg_image_count:
@@ -723,9 +725,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
         # These should already be 0, but just in case make sure
         agg_metric = 0
         agg_loss = 0
-    plpy.info("eval_transition Session in sess:{}".format(sess))
-    plpy.info("eval_transition Session in sd:{}".format(SD[SD_NAMES.SESS]))
-    plpy.info("eval_transition Session in keras:{}".format(K.get_session()))
+
 
     x_val = np_array_float32(independent_var)
     y_val = np_array_int16(dependent_var)
