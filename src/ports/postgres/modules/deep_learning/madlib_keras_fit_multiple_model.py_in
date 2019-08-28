@@ -407,7 +407,11 @@ class FitMultipleModel():
             self.update_info_table(mst, True)
             if self.validation_table:
                 self.update_info_table(mst, False)
-
+    #TODO
+    """
+    1. use plpy prepare for uda
+    2. go through the debug commits
+    """
     def run_training(self):
         # TODO: fix distributed by
         mst_weights_query = """
@@ -431,7 +435,7 @@ class FitMultipleModel():
                                                       {self.mst_weights}.model_arch::TEXT,
                                                       {self.mst_weights}.compile_params::TEXT,
                                                       {self.mst_weights}.fit_params::TEXT,
-                                                      iris.gp_segment_id,
+                                                      src.gp_segment_id,
                                                       ARRAY{self.seg_ids_train},
                                                       ARRAY{self.images_per_seg_train},
                                                       {self.gpus_per_host},
@@ -440,9 +444,9 @@ class FitMultipleModel():
                                                       {is_final_iteration}::BOOLEAN
                                                       )::BYTEA AS weights,
                 {self.mst_weights}.mst_key AS mst_key
-                FROM {self.source_table} iris JOIN {self.mst_weights}
+                FROM {self.source_table} src JOIN {self.mst_weights}
                 USING (dist_key)
-                GROUP BY iris.dist_key, {self.mst_weights}.mst_key
+                GROUP BY src.dist_key, {self.mst_weights}.mst_key
                 ) weights_one_schedule
             WHERE {self.model_output_table}.mst_key = weights_one_schedule.mst_key
             """.format(mb_dep_var_col=mb_dep_var_col,
