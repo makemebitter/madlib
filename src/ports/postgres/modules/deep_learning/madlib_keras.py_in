@@ -679,6 +679,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     if SD_NAMES.SESS in SD:
         sess = SD[SD_NAMES.SESS]
         K.set_session(sess)
+        K.clear_session()
     else:
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
