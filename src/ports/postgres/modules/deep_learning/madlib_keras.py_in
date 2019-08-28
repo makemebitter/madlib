@@ -429,10 +429,10 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     SD = kwargs['SD']
     device_name = get_device_name_and_set_cuda_env(gpus_per_host,
                                                    current_seg_id)
-    if is_final_iteration:
-        plpy.info("DUMMY_VAR final iteration:{}".format(DUMMY_VAR))
-    DUMMY_VAR = "FIT"
-    plpy.info("DUMMY_VAR after:{}".format(DUMMY_VAR))
+    # if is_final_iteration:
+    #     plpy.info("DUMMY_VAR final iteration:{}".format(DUMMY_VAR))
+    # DUMMY_VAR = "FIT"
+    # plpy.info("DUMMY_VAR after:{}".format(DUMMY_VAR))
     # Cerebro state has the weights passed from the previous segment
     if is_multiple_model:
         prev_serialized_weights = madlib_keras_serializer.\
@@ -663,6 +663,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
                                    is_final_iteration, **kwargs):
     SD = kwargs['SD']
     plpy.info('begining of keras eval transition')
+    plpy.info("Eval_transition default graph:{}".format(tf.get_default_graph()))
     device_name = get_device_name_and_set_cuda_env(gpus_per_host, current_seg_id)
     # plpy.info("CUDA visiablity:{}".format(os.environ[CUDA_VISIBLE_DEVICES_KEY]))
     # plpy.info("Type of CUDA visiability{}".format(type(os.environ[CUDA_VISIBLE_DEVICES_KEY])))
@@ -681,8 +682,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # have a session.
     if SD_NAMES.SESS in SD:
         sess = SD[SD_NAMES.SESS]
-        K.set_session(sess)
-        K.clear_session()
+        # K.set_session(sess)
+        # K.clear_session()
     else:
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         # sess = K.get_session()
@@ -709,8 +710,11 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     #     # sess = K.get_session()
     #     sess = SD[SD_NAMES.SESS]
     plpy.info("eval_transition Session in sess:{}".format(sess))
+    plpy.info("eval_transition graph in sess:{}".format(sess.graph))
     plpy.info("eval_transition Session in sd:{}".format(SD[SD_NAMES.SESS]))
+    plpy.info("eval_transition graph in sd:{}".format(SD[SD_NAMES.SESS].graph))
     plpy.info("eval_transition Session in keras:{}".format(K.get_session()))
+    plpy.info("eval_transition Graph in keras:{}".format(K.get_session().graph))
     if SD_NAMES.SEGMENT_MODEL in SD:
         segment_model = SD[SD_NAMES.SEGMENT_MODEL]
         if not agg_image_count:
