@@ -452,7 +452,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     plpy.info("Fit_transition Session in sd:{}".format(SD[SD_NAMES.SESS]))
     plpy.info("Fit_transition graph in sd:{}".format(SD[SD_NAMES.SESS].graph))
     plpy.info("Fit_transition Session in keras:{}".format(K.get_session()))
-    plpy.info("Fit_transition Session in keras:{}".format(K.get_session().graph))
+    plpy.info("Fit_transition Graph in keras:{}".format(K.get_session().graph))
     # Set up system if this is the first buffer on segment.
 
     # On model hopper training, clean the session on the first row.
