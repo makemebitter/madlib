@@ -441,6 +441,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     # If a live session is present, re-use it. Otherwise, recreate it.
     if SD_NAMES.SESS in SD:
         sess = SD[SD_NAMES.SESS]
+        K.set_session(sess)
     else:
         # sess = K.get_session()
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
@@ -677,6 +678,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # have a session.
     if SD_NAMES.SESS in SD:
         sess = SD[SD_NAMES.SESS]
+        K.set_session(sess)
     else:
         sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
         SD[SD_NAMES.SESS] = sess
