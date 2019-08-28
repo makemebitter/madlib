@@ -144,6 +144,7 @@ class FitMultipleModel():
         """.format(**locals())
         plpy.execute(mst_create_weights_query)
 
+        #TODO remove iris reference
         mlp_uda_query = """
             --UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
             --FROM (
@@ -482,7 +483,7 @@ class FitMultipleModel():
         # WARNING weights_one_schedule.weights is the state returned by
         # the step function, which is img_count and weights concatnated
 
-        plpy.execute(self.mlp_uda_query_plan)
+        # plpy.execute(self.mlp_uda_query_plan)
         # plpy.execute("DROP TABLE IF EXISTS {0}".format(self.mst_weights))
 
     def query_weights(self):

@@ -153,15 +153,15 @@ def fit(schema_madlib, source_table, model, model_arch_table,
 
     # Run distributed training for specified number of iterations
     for i in range(1, num_iterations+1):
-        start_iteration = time.time()
-        is_final_iteration = (i == num_iterations)
-        iteration_result = plpy.execute(run_training_iteration,
-                                        [serialized_weights, is_final_iteration])[0]['iteration_result']
-        end_iteration = time.time()
-        info_str = "\tTime for training in iteration {0}: {1} sec".format(i,
-            end_iteration - start_iteration)
-        serialized_weights = madlib_keras_serializer.\
-            get_serialized_1d_weights_from_state(iteration_result)
+        # start_iteration = time.time()
+        # is_final_iteration = (i == num_iterations)
+        # iteration_result = plpy.execute(run_training_iteration,
+        #                                 [serialized_weights, is_final_iteration])[0]['iteration_result']
+        # end_iteration = time.time()
+        # info_str = "\tTime for training in iteration {0}: {1} sec".format(i,
+        #     end_iteration - start_iteration)
+        # serialized_weights = madlib_keras_serializer.\
+        #     get_serialized_1d_weights_from_state(iteration_result)
 
         if should_compute_metrics_this_iter(i, metrics_compute_frequency,
                                             num_iterations):
