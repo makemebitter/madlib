@@ -394,8 +394,8 @@ def compute_loss_and_metrics(schema_madlib, table, compile_params, model_arch,
     # metrics_list.append(metric)
     # loss_list.append(loss)
 
-    metric = 1
-    loss = 1
+    metric = [1]
+    loss = [1]
     return end_val - start_val, metric, loss
 
 def should_compute_metrics_this_iter(curr_iter, metrics_compute_frequency,
