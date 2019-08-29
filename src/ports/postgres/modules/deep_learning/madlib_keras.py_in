@@ -154,7 +154,7 @@ def fit(schema_madlib, source_table, model, model_arch_table,
         start_iteration = time.time()
         is_final_iteration = (i == num_iterations)
         iteration_result = plpy.execute(run_training_iteration,
-                                        # [serialized_weights, is_final_iteration])[0]['iteration_result']
+                                        [serialized_weights, is_final_iteration])[0]['iteration_result']
         end_iteration = time.time()
         info_str = "\tTime for training in iteration {0}: {1} sec".format(i,
             end_iteration - start_iteration)
