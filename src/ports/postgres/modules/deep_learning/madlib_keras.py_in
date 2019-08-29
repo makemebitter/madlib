@@ -524,12 +524,15 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
 
     # last row of the last iteration
     if agg_image_count == total_images:
-        updated_weights = [total_images * w for w in updated_weights]
-        if is_final_iteration:
+        if not is_multiple_model:
+            updated_weights = [total_images * w for w in updated_weights]
+        if is_final_iteration or is_multiple_model:
             del SD[SD_NAMES.SEGMENT_MODEL]
             del SD[SD_NAMES.SESS]
             K.clear_session()
             sess.close()
+            del segment_model
+            del sess
 
 
 
@@ -775,6 +778,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
         SD[SD_NAMES.SESS].close()
         del SD[SD_NAMES.SEGMENT_MODEL]
         del SD[SD_NAMES.SESS]
+        del segment_model
+        del sess
 
     state[0] = agg_loss
     state[1] = agg_metric
