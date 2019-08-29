@@ -438,11 +438,11 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
                    images_per_seg, gpus_per_host, segments_per_host,
                    prev_serialized_weights, is_final_iteration=True,
                    is_multiple_model=False, **kwargs):
-    device_name = get_device_name_and_set_cuda_env(gpus_per_host,
-                                                   current_seg_id)
-    sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
-    K.set_session(sess)
-    return None
+    # device_name = get_device_name_and_set_cuda_env(gpus_per_host,
+    #                                                current_seg_id)
+    # sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
+    # K.set_session(sess)
+    # return None
 
     if not independent_var or not dependent_var:
         return state
