@@ -445,11 +445,12 @@ class FitMultipleModel():
                                                       {self.mst_weights}.weights::BYTEA,
                                                       {is_final_iteration}::BOOLEAN
                                                       )::BYTEA AS weights,
-                {self.mst_weights}.mst_key AS mst_key
+                {self.mst_weights}.mst_key AS mst_key,
+                src.dist_key AS dist_key
                 FROM {self.source_table} src JOIN {self.mst_weights}
                 USING (dist_key)
                 GROUP BY src.dist_key, {self.mst_weights}.mst_key
-                DISTRIBUTED BY (mst_key)
+            DISTRIBUTED BY (dist_key)
             """.format(mb_dep_var_col=mb_dep_var_col,
                         mb_indep_var_col=mb_indep_var_col,
                         is_final_iteration=True,
