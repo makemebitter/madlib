@@ -814,6 +814,8 @@ def internal_keras_eval_merge(state1, state2, **kwargs):
     return merged_state
 
 def internal_keras_eval_final(state, **kwargs):
+    return None
+
     loss, metric, image_count = state
 
     if image_count == 0:
