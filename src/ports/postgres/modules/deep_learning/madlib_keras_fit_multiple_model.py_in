@@ -453,15 +453,16 @@ class FitMultipleModel():
                         is_final_iteration=True,
                         self=self
                        )
-        plpy.execute(mlp_uda_query)
+        mlp_uda_query_plan = mlp_uda_query
+        plpy.execute(mlp_uda_query_plan)
         mlp_update_query = """
             UPDATE {self.model_output_table}
             SET weights = weights_one_schedule.weights
             FROM weights_one_schedule
             WHERE {self.model_output_table}.mst_key = weights_one_schedule.mst_key
             """.format(self=self)
-        # mlp_uda_query_plan = plpy.prepare(mlp_uda_query)
-        plpy.execute(mlp_update_query)
+        mlp_update_query_plan = plpy.prepare(mlp_update_query)
+        plpy.execute(mlp_update_query_plan)
         # plpy.execute("DROP TABLE IF EXISTS {0}".format(self.mst_weights))
 
     def query_weights(self):
