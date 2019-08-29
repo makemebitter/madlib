@@ -146,7 +146,7 @@ class FitMultipleModel():
                 self.create_mst_schedule_table(mst_row)
                 self.run_training()
             self.evaluate_model(e, self.source_table, True)
-            sleep(30)
+            sleep(120)
             if self.validation_table:
                 self.evaluate_model(e, self.validation_table, False)
 
