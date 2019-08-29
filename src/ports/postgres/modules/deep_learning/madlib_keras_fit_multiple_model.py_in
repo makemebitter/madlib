@@ -449,6 +449,7 @@ class FitMultipleModel():
                 FROM {self.source_table} src JOIN {self.mst_weights}
                 USING (dist_key)
                 GROUP BY src.dist_key, {self.mst_weights}.mst_key
+                DISTRIBUTED BY (mst_key)
             """.format(mb_dep_var_col=mb_dep_var_col,
                         mb_indep_var_col=mb_indep_var_col,
                         is_final_iteration=True,
