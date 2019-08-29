@@ -391,11 +391,12 @@ def compute_loss_and_metrics(schema_madlib, table, compile_params, model_arch,
     #                'metrics. Expected both loss and a metric.'.format(table))
     # loss = evaluate_result[0]
     # metric = evaluate_result[1]
-    # metrics_list.append(metric)
-    # loss_list.append(loss)
 
-    metric = [1]
-    loss = [1]
+    metric = 1
+    loss = 1
+    metrics_list.append(metric)
+    loss_list.append(loss)
+
     return end_val - start_val, metric, loss
 
 def should_compute_metrics_this_iter(curr_iter, metrics_compute_frequency,
