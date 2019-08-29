@@ -429,8 +429,8 @@ class FitMultipleModel():
         # WARNING weights_one_schedule.weights is the state returned by
         # the step function, which is img_count and weights concatnated
         mlp_uda_query = """
-            UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
-            FROM (
+            -- UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
+            -- FROM (
             SELECT {self.schema_madlib}.fit_step_multiple_model({mb_dep_var_col},
                                                       {mb_indep_var_col},
                                                       {self.mst_weights}.model_arch::TEXT,
@@ -448,7 +448,7 @@ class FitMultipleModel():
                 FROM {self.source_table} src JOIN {self.mst_weights}
                 USING (dist_key)
                 GROUP BY src.dist_key, {self.mst_weights}.mst_key
-                ) weights_one_schedule
+            --    ) weights_one_schedule
             -- WHERE {self.model_output_table}.mst_key = weights_one_schedule.mst_key
             """.format(mb_dep_var_col=mb_dep_var_col,
                         mb_indep_var_col=mb_indep_var_col,
