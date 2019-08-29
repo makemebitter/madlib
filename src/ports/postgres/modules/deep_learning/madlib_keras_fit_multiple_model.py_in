@@ -416,7 +416,7 @@ class FitMultipleModel():
         # TODO: fix distributed by
         mst_weights_query = """
             DROP TABLE IF EXISTS {self.mst_weights};
-            CREATE TEMP TABLE {self.mst_weights} AS
+            CREATE TABLE {self.mst_weights} AS
                 SELECT mst.*, wgh.weights, model_arch.model_arch
                 FROM
                     mst_current_schedule mst JOIN {self.model_output_table} wgh
@@ -429,7 +429,7 @@ class FitMultipleModel():
         # WARNING weights_one_schedule.weights is the state returned by
         # the step function, which is img_count and weights concatnated
         mlp_uda_query = """
-            explain UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
+            UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
             FROM (
             SELECT {self.schema_madlib}.fit_step_multiple_model({mb_dep_var_col},
                                                       {mb_indep_var_col},
@@ -455,10 +455,9 @@ class FitMultipleModel():
                         is_final_iteration=True,
                         self=self
                        )
-        plpy.info(plpy.execute(mlp_uda_query)[0])
         mlp_uda_query_plan = plpy.prepare(mlp_uda_query)
         plpy.execute(mlp_uda_query_plan)
-        plpy.execute("DROP TABLE IF EXISTS {0}".format(self.mst_weights))
+        # plpy.execute("DROP TABLE IF EXISTS {0}".format(self.mst_weights))
 
     def query_weights(self):
         mlp_weights_query = """
