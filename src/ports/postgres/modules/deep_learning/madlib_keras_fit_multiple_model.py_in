@@ -457,6 +457,7 @@ class FitMultipleModel():
         mlp_update_query = """
             UPDATE {self.model_output_table}
             SET weights = weights_one_schedule.weights
+            FROM weights_one_schedule
             WHERE {self.model_output_table}.mst_key = weights_one_schedule.mst_key
             """.format(self=self)
         # mlp_uda_query_plan = plpy.prepare(mlp_uda_query)
