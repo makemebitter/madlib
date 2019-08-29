@@ -429,7 +429,7 @@ class FitMultipleModel():
         # WARNING weights_one_schedule.weights is the state returned by
         # the step function, which is img_count and weights concatnated
         mlp_uda_query = """
-            UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
+            explain UPDATE {self.model_output_table} SET weights = weights_one_schedule.weights
             FROM (
             SELECT {self.schema_madlib}.fit_step_multiple_model({mb_dep_var_col},
                                                       {mb_indep_var_col},
@@ -455,6 +455,7 @@ class FitMultipleModel():
                         is_final_iteration=True,
                         self=self
                        )
+        plpy.info(plpy.execute(mlp_uda_query))
         mlp_uda_query_plan = plpy.prepare(mlp_uda_query)
         plpy.execute(mlp_uda_query_plan)
         plpy.execute("DROP TABLE IF EXISTS {0}".format(self.mst_weights))
