@@ -434,11 +434,17 @@ def update_model(segment_model, prev_serialized_weights):
         prev_serialized_weights, model_shapes)
     segment_model.set_weights(model_weights)
 
-def fit_transition(*args, **kwargs):
+def fit_transition(queue, state, dependent_var, independent_var, model_architecture,
+                   compile_params, fit_params, current_seg_id, seg_ids,
+                   images_per_seg, gpus_per_host, segments_per_host,
+                   prev_serialized_weights, is_final_iteration=True,
+                   is_multiple_model=False, **kwargs):
     queue = Queue.Queue()
-    args_list = list(args)
-    args_list.insert(0, queue)
-    t = threading.Thread(target=fit_transition_helper, args=(*args, **kwargs))
+    t = threading.Thread(target=fit_transition_helper, args=(queue, state, dependent_var, independent_var, model_architecture,
+                   compile_params, fit_params, current_seg_id, seg_ids,
+                   images_per_seg, gpus_per_host, segments_per_host,
+                   prev_serialized_weights, is_final_iteration=True,
+                   is_multiple_model=False, **kwargs))
     t.start()
     t.join()
     res = queue.get()
