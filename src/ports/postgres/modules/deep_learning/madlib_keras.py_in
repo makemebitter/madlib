@@ -645,7 +645,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     # Otherwise, we may (last iteration of fit) or may not (user evaluate call)
     # have a session.
 
-    if SD_NAMES.SESS in SD :
+    if SD_NAMES.SESS in SD:
         if SD_NAMES.SEGMENT_MODEL not in SD:
             plpy.error("Session and model should exist in SD after the first row"
                         "of the first iteration")
