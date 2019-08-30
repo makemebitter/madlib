@@ -1184,7 +1184,8 @@ FROM iris_model_first_run AS first, iris_model_transfer_summary AS second;
 -- Multiple models test
 DROP TABLE if exists iris_data_packed_dist, iris_data_packed_dist_summary;
 CREATE TABLE iris_data_packed_dist AS
-	SELECT *, (row_number() over())%3*5 AS dist_key FROM iris_data_packed;
+	SELECT *, (row_number() over())%3 AS dist_key FROM iris_data_packed
+DISTRIBUTED BY (dist_key);
 CREATE TABLE iris_data_packed_dist_summary AS SELECT * FROM iris_data_packed_summary;
 
 DROP TABLE IF EXISTS mst_table;
