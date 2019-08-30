@@ -58,6 +58,7 @@ mb_indep_var_col = MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL
 
 # TODO remove hardcoded col names
     # dist_key
+# ask frank about model_id
 class ModelSelectionSchema:
     MST_KEY = 'mst_key'
     MODEL_ID = ModelArchSchema.MODEL_ID

@@ -1189,12 +1189,12 @@ CREATE TABLE iris_data_packed_dist_summary AS SELECT * FROM iris_data_packed_sum
 
 DROP TABLE IF EXISTS mst_table;
 CREATE TABLE mst_table (mst_key INTEGER,
-		                model_arch_id INTEGER,
-		                compile_params VARCHAR,
-		                fit_params VARCHAR,
-                 		unique (model_arch_id, compile_params, fit_params));
+						model_id INTEGER,
+						compile_params VARCHAR,
+						fit_params VARCHAR,
+						unique (model_id, compile_params, fit_params));
 INSERT INTO mst_table(mst_key,
-	model_arch_id,
+	model_id,
 	compile_params,
 	fit_params)
 	VALUES (1, 1,
@@ -1240,7 +1240,7 @@ PERFORM assert(COUNT(*)=3, 'Info table must have exactly same rows as the number
 FROM iris_multiple_model_info;
 
 PERFORM assert(
-        model_arch_id = 1 AND
+        model_id = 1 AND
         model_type = 'madlib_keras' AND
         model_size > 0 AND
         fit_params = $MAD$batch_size=16, epochs=1$MAD$::text AND
