@@ -56,10 +56,11 @@ import datetime
 mb_dep_var_col = MINIBATCH_OUTPUT_DEPENDENT_COLNAME_DL
 mb_indep_var_col = MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL
 
-
+# TODO remove hardcoded col names
+    # dist_key
 class ModelSelectionSchema:
     MST_KEY = 'mst_key'
-    MODEL_ARCH_ID = 'model_arch_id'
+    MODEL_ID = ModelArchSchema.MODEL_ID
     COMPILE_PARAMS = 'compile_params'
     FIT_PARAMS = 'fit_params'
     col_types = ('SERIAL', 'INTEGER', 'VARCHAR', 'VARCHAR')
@@ -98,7 +99,7 @@ class FitMultipleModel():
         self.msts = self.query_msts()
         random.shuffle(self.msts)
         self.mst_key_col = ModelSelectionSchema.MST_KEY
-        self.model_arch_id_col = ModelSelectionSchema.MODEL_ARCH_ID
+        self.model_id_col = ModelSelectionSchema.MODEL_ID
         self.compile_params_col = ModelSelectionSchema.COMPILE_PARAMS
         self.fit_params_col = ModelSelectionSchema.FIT_PARAMS
         self.dist_keys = self.query_dist_keys()
@@ -152,7 +153,7 @@ class FitMultipleModel():
         res = self.query_weights()
         res_map = {x['mst_key']: x['weights'] for x in res if x['weights']}
         for mst in self.msts:
-            model_arch = self.query_arch(mst[self.model_arch_id_col]
+            model_arch = self.query_arch(mst[self.model_id_col]
                                          )[ModelArchSchema.MODEL_ARCH]
             state = res_map[mst[self.mst_key_col]]
             serialized_weights = \
@@ -185,22 +186,22 @@ class FitMultipleModel():
             grand_schedule[dist_key] = rotate(self.msts, index)
         return grand_schedule
 
-    def query_arch(self, model_arch_id):
+    def query_arch(self, model_id):
         model_arch_query = """
                             SELECT {0}, {1} FROM {2} WHERE {3} = {4}
                            """.format(ModelArchSchema.MODEL_ARCH,
                                       ModelArchSchema.MODEL_WEIGHTS,
                                       self.model_arch_table,
                                       ModelArchSchema.MODEL_ID,
-                                      model_arch_id)
+                                      model_id)
         model_arch_result = plpy.execute(model_arch_query)[0]
         return model_arch_result
 
     def query_msts(self):
         msts_query = """
-                     SELECT * FROM {}
-                     ORDER BY mst_key
-                     """.format(self.model_selection_table)
+                     SELECT * FROM {self.model_selection_table}
+                     ORDER BY {self.mst_key_col}
+                     """.format(**locals())
         res = list(plpy.execute(msts_query))
         return res
 
@@ -215,12 +216,12 @@ class FitMultipleModel():
 
     def create_mst_schedule_table(self, mst_row):
         mst_temp_query = """DROP TABLE IF EXISTS mst_current_schedule;
-                            CREATE TABLE mst_current_schedule(model_arch_id INTEGER,
-                                                               compile_params VARCHAR,
-                                                               fit_params VARCHAR,
+                            CREATE TABLE mst_current_schedule({self.model_id_col} INTEGER,
+                                                               {self.compile_params_col} VARCHAR,
+                                                               {self.fit_params_col} VARCHAR,
                                                                dist_key INTEGER,
-                                                               mst_key INTEGER primary key)
-                         """
+                                                               {self.mst_key_col} INTEGER primary key)
+                         """.format(**locals())
         plpy.execute(mst_temp_query)
         for mst, dist_key in zip(mst_row, self.dist_keys):
             mst_insert_query = """
@@ -230,7 +231,7 @@ class FitMultipleModel():
                                             $madlib${}$madlib$,
                                             {},
                                             {})
-                                """.format(mst[self.model_arch_id_col], mst[self.compile_params_col],
+                                """.format(mst[self.model_id_col], mst[self.compile_params_col],
                                            mst[self.fit_params_col], dist_key, mst[self.mst_key_col])
             plpy.execute(mst_insert_query)
 
@@ -243,7 +244,7 @@ class FitMultipleModel():
                                """.format(self.model_output_table)
         info_table_create_query = """CREATE TABLE {}
                                 (mst_key INTEGER PRIMARY KEY,
-                                 model_arch_id INTEGER,
+                                 model_id INTEGER,
                                  compile_params TEXT,
                                  fit_params TEXT,
                                  model_type TEXT,
@@ -263,7 +264,7 @@ class FitMultipleModel():
         plpy.execute(output_table_create_query)
         plpy.execute(info_table_create_query)
         for mst in self.msts:
-            model_arch_result = self.query_arch(mst[self.model_arch_id_col])
+            model_arch_result = self.query_arch(mst[self.model_id_col])
             model_arch = model_arch_result[ModelArchSchema.MODEL_ARCH]
             serialized_weights = get_initial_weights(self.model_output_table,
                                                      model_arch_result,
@@ -294,14 +295,14 @@ class FitMultipleModel():
             plpy.execute(output_table_insert_query_prepared, [
                          serialized_state, json.dumps(model_arch)])
             info_table_insert_query = """
-                    INSERT INTO {}(mst_key, model_arch_id, compile_params,
+                    INSERT INTO {}(mst_key, model_id, compile_params,
                                    fit_params, model_type, model_size,
                                    metrics_type)
                         VALUES ({}, {}, $madlib${}$madlib$,
                                 $madlib${}$madlib$, '{}', {}, {})
                 """.format(self.model_info_table,
                            mst[self.mst_key_col],
-                           mst[self.model_arch_id_col],
+                           mst[self.model_id_col],
                            mst[self.compile_params_col],
                            mst[self.fit_params_col],
                            'madlib_keras',
@@ -418,7 +419,7 @@ class FitMultipleModel():
                     mst_current_schedule mst JOIN {self.model_output_table} wgh
                     ON mst.mst_key = wgh.mst_key
                         JOIN {self.model_arch_table} model_arch
-                        ON mst.model_arch_id = model_arch.model_id
+                        ON mst.model_id = model_arch.model_id
                 DISTRIBUTED BY (dist_key)
         """.format(**locals())
         plpy.execute(mst_weights_query)

@@ -470,40 +470,6 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     if not state: # first row each iteration
         update_model(segment_model, prev_serialized_weights)
 
-
-
-
-    # Set up system if this is the first buffer on segment.
-
-    # On model hopper training, clean the session on the first row.
-
-    # if is_multiple_model:
-    #     if not state:
-    #         K.clear_session()
-    #         segment_model = model_from_json(model_architecture)
-    #         compile_and_set_weights(segment_model, compile_params, device_name,
-    #                 prev_serialized_weights)
-    #         SD[SD_NAMES.SEGMENT_MODEL] = segment_model
-
-    #     else:
-    #         segment_model = SD[SD_NAMES.SEGMENT_MODEL]
-
-
-    # # On single model fit, reuse the model if it exists
-    # else:
-    #     if SD_NAMES.SEGMENT_MODEL in SD:
-    #         segment_model = SD[SD_NAMES.SEGMENT_MODEL]
-    #         if not state:
-    #             model_shapes = get_model_shapes(segment_model)
-    #             model_weights = madlib_keras_serializer.deserialize_as_nd_weights(
-    #                 prev_serialized_weights, model_shapes)
-    #             segment_model.set_weights(model_weights)
-    #     else:
-    #         segment_model = model_from_json(model_architecture)
-    #         compile_and_set_weights(segment_model, compile_params, device_name,
-    #                         prev_serialized_weights)
-    #         SD[SD_NAMES.SEGMENT_MODEL] = segment_model
-
     # Prepare the data
     x_train = np_array_float32(independent_var)
     y_train = np_array_int16(dependent_var)
@@ -533,25 +499,6 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
             sess.close()
             del segment_model
             del sess
-
-
-
-    # Re-serialize the weights
-    # Update image count, check if we are done
-    # if agg_image_count == total_images:
-        # Once done with all images on a segment, we update weights
-        # with the total number of images here instead of the merge function.
-        # The merge function only deals with aggregating them.
-        # if not is_multiple_model:
-            # updated_weights = [ total_images * w for w in updated_weights ]
-
-        # In GPDB, each segment would have a keras session, so clear
-        # them at the end of final iteration and also every final buffer for cerebro
-        # if is_final_iteration or is_multiple_model:
-        #     K.clear_session()
-        #     sess.close()
-        #     del SD[SD_NAMES.SEGMENT_MODEL]
-        #     del SD[SD_NAMES.SESS]
 
     new_state = madlib_keras_serializer.serialize_state_with_nd_weights(
         agg_image_count, updated_weights)
@@ -724,29 +671,6 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     plpy.info("Eval: tf default graph:{}".format(tf.get_default_graph()))
     plpy.info("Eval: Sess graph:{}".format(sess.graph))
     plpy.info("Eval: Model:{}".format(segment_model))
-    # if is_final_iteration and SD_NAMES.SESS not in SD:
-    #     sess = get_keras_session(device_name, gpus_per_host, segments_per_host)
-    #     SD[SD_NAMES.SESS] = sess
-    #     K.set_session(sess)
-    #     # Popping the segment model kept in the SD of internal_keras_eval_transition,
-    #     # which is leftover from the previous iteration. But the session is already
-    #     # cleared by fit_transition at this time, so the model cannot be re-used.
-    #     SD.pop(SD_NAMES.SEGMENT_MODEL, None)
-    # # K.get_session()
-    # if SD_NAMES.SEGMENT_MODEL in SD:
-    #     segment_model = SD[SD_NAMES.SEGMENT_MODEL]
-    #     if not agg_image_count:
-    #         model_shapes = get_model_shapes(segment_model)
-    #         model_weights = madlib_keras_serializer.deserialize_as_nd_weights(
-    #             serialized_weights, model_shapes)
-    #         segment_model.set_weights(model_weights)
-    # else:
-    #     segment_model = model_from_json(model_architecture)
-    #     compile_and_set_weights(segment_model, compile_params, device_name,
-    #                     serialized_weights)
-    #     SD[SD_NAMES.SEGMENT_MODEL] = segment_model
-
-
 
     x_val = np_array_float32(independent_var)
     y_val = np_array_int16(dependent_var)
