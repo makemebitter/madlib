@@ -493,6 +493,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
         if not is_multiple_model:
             updated_weights = [total_images * w for w in updated_weights]
         if is_final_iteration or is_multiple_model:
+            plpy.info("fit: Collecting sess and model")
             del SD[SD_NAMES.SEGMENT_MODEL]
             del SD[SD_NAMES.SESS]
             K.clear_session()
@@ -698,7 +699,7 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
 
     # Clean the session on the last buffer of last iteration
     if agg_image_count == total_images and is_final_iteration:
-        plpy.info("Collecting sess and model")
+        plpy.info("eval: Collecting sess and model")
         K.clear_session()
         SD[SD_NAMES.SESS].close()
         del SD[SD_NAMES.SEGMENT_MODEL]
