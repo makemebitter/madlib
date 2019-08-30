@@ -52,7 +52,7 @@ from utilities.validate_args import get_expr_type
 from utilities.validate_args import quote_ident
 from utilities.control import MinWarning
 import tensorflow as tf
-
+import threading
 class SD_NAMES:
     SESS = 'sess'
     SEGMENT_MODEL = 'segment_model'
@@ -433,7 +433,15 @@ def update_model(segment_model, prev_serialized_weights):
         prev_serialized_weights, model_shapes)
     segment_model.set_weights(model_weights)
 
-def fit_transition(state, dependent_var, independent_var, model_architecture,
+def fit_transition(*args, **kwargs):
+    queue = Queue.Queue()
+    t = threading.Thread(target=fit_transition_helper, args=(queue, *args, **kwargs))
+    t.start()
+    t.join()
+    res = queue.get()
+    return res
+
+def fit_transition_helper(queue, state, dependent_var, independent_var, model_architecture,
                    compile_params, fit_params, current_seg_id, seg_ids,
                    images_per_seg, gpus_per_host, segments_per_host,
                    prev_serialized_weights, is_final_iteration=True,
@@ -568,8 +576,8 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     del x_train
     del y_train
     end_transition = time.time()
+    queue.put(new_state)
 
-    return new_state
 
 def fit_merge(state1, state2, **kwargs):
 
@@ -690,7 +698,15 @@ def get_loss_metric_from_keras_eval(schema_madlib, table, compile_params,
     return loss_metric
 
 
-def internal_keras_eval_transition(state, dependent_var, independent_var,
+def internal_keras_eval_transition(*args, **kwargs):
+    queue = Queue.Queue()
+    t = threading.Thread(target=internal_keras_eval_transition_helper, args=(queue, *args, **kwargs))
+    t.start()
+    t.join()
+    res = queue.get()
+    return res
+
+def internal_keras_eval_transition_helper(queue, state, dependent_var, independent_var,
                                    model_architecture, serialized_weights, compile_params,
                                    current_seg_id, seg_ids, images_per_seg,
                                    gpus_per_host, segments_per_host,
@@ -798,8 +814,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     state[0] = agg_loss
     state[1] = agg_metric
     state[2] = agg_image_count
-
-    return state
+    queue.put(state)
+    # return state
 
 def internal_keras_eval_merge(state1, state2, **kwargs):
     # If either state is None, return the other one
