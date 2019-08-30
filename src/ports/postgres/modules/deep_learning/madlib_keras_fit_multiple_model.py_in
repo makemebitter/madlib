@@ -459,6 +459,7 @@ class FitMultipleModel():
         update_query_plan = plpy.prepare(update_query, ["BYTEA", "INTEGER"])
         for mst_key, weights in res_map.items():
             plpy.execute(update_query_plan, [weights, mst_key])
+        plpy.execute("DROP TABLE IF EXISTS {0}".format(self.mst_weights))
 
     def query_weights(self):
         mlp_weights_query = """
