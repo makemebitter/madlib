@@ -53,6 +53,7 @@ from utilities.validate_args import quote_ident
 from utilities.control import MinWarning
 import tensorflow as tf
 import threading
+from Queue import Queue
 class SD_NAMES:
     SESS = 'sess'
     SEGMENT_MODEL = 'segment_model'
