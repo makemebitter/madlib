@@ -90,18 +90,29 @@ class FitMultipleModel():
         self.module_name = 'madlib_keras_fit_multiple_model'
         self.schema_madlib = schema_madlib
         self.version = madlib_version(self.schema_madlib)
+        self.mst_key_col = ModelSelectionSchema.MST_KEY
+        self.model_id_col = ModelSelectionSchema.MODEL_ID
+        self.compile_params_col = ModelSelectionSchema.COMPILE_PARAMS
+        self.fit_params_col = ModelSelectionSchema.FIT_PARAMS
+        self.train_mst_metric_eval_time = defaultdict(list)
+        self.train_mst_loss = defaultdict(list)
+        self.train_mst_metric = defaultdict(list)
+        if self.validation_table:
+            self.valid_mst_metric_eval_time = defaultdict(list)
+            self.valid_mst_loss = defaultdict(list)
+            self.valid_mst_metric = defaultdict(list)
+        self.mst_weights = 'mst_weights' + unique_string()
+
         self.fit_validator = FitInputValidator(
             self.source_table, None, self.model_output_table,
             self.model_arch_table, mb_dep_var_col, mb_indep_var_col,
             self.num_iterations, 1, False)
         input_tbl_valid(self.model_selection_table, self.module_name)
         output_tbl_valid(self.model_info_table, self.module_name)
+
         self.msts = self.query_msts()
         random.shuffle(self.msts)
-        self.mst_key_col = ModelSelectionSchema.MST_KEY
-        self.model_id_col = ModelSelectionSchema.MODEL_ID
-        self.compile_params_col = ModelSelectionSchema.COMPILE_PARAMS
-        self.fit_params_col = ModelSelectionSchema.FIT_PARAMS
+
         self.dist_keys = self.query_dist_keys()
         self.grand_schedule = self.generate_schedule()
 
@@ -111,14 +122,6 @@ class FitMultipleModel():
         self.segments_per_host, self.gpus_per_host = get_segments_and_gpus(
             gpus_per_host)
         self.create_model_output_table()
-        self.train_mst_metric_eval_time = defaultdict(list)
-        self.train_mst_loss = defaultdict(list)
-        self.train_mst_metric = defaultdict(list)
-        if self.validation_table:
-            self.valid_mst_metric_eval_time = defaultdict(list)
-            self.valid_mst_loss = defaultdict(list)
-            self.valid_mst_metric = defaultdict(list)
-        self.mst_weights = 'mst_weights' + unique_string()
         self.fit_multiple_model()
 
     def fit_multiple_model(self):
