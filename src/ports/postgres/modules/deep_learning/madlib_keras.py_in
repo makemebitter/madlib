@@ -436,7 +436,9 @@ def update_model(segment_model, prev_serialized_weights):
 
 def fit_transition(*args, **kwargs):
     queue = Queue.Queue()
-    t = threading.Thread(target=fit_transition_helper, args=[queue, *args, **kwargs])
+    args_list = list(args)
+    args_list.insert(0, queue)
+    t = threading.Thread(target=fit_transition_helper, args=(*args, **kwargs))
     t.start()
     t.join()
     res = queue.get()
