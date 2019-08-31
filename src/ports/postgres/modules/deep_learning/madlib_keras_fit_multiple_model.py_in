@@ -150,14 +150,21 @@ class FitMultipleModel():
     def train_multiple_model(self):
         for e in range(self.num_iterations):
             plpy.info("Iteration: {}".format(e))
+            begin_time = time.time()
             for i in range(len(self.msts)):
                 mst_row = [self.grand_schedule[dist_key][i]
                            for dist_key in self.dist_keys]
                 self.create_mst_schedule_table(mst_row)
                 self.run_training()
+            train_time = time.time()
+            train_duration = train_time - begin_time
+            plpy.info("Iteration:{}, train time:{}".format(e, train_duration))
             self.evaluate_model(e, self.source_table, True)
             if self.validation_table:
                 self.evaluate_model(e, self.validation_table, False)
+            eval_time = time.time()
+            eval_duration = eval_time - train_time
+            plpy.info("Iteration:{}, eval time:{}".format(e, eval_duration))
 
     def evaluate_model(self, epoch, table, is_train):
         res = self.query_weights()
