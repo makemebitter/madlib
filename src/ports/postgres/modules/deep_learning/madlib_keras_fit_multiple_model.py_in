@@ -57,9 +57,10 @@ mb_dep_var_col = MINIBATCH_OUTPUT_DEPENDENT_COLNAME_DL
 mb_indep_var_col = MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL
 
 # TODO remove hardcoded col names
-    # dist_key
+# dist_key
 # ask frank about model_id
 # tests for mst>segs, mst=segs, mst<segs
+
 
 class ModelSelectionSchema:
     MST_KEY = 'mst_key'
@@ -100,18 +101,28 @@ class FitMultipleModel():
         self.train_mst_metric_eval_time = defaultdict(list)
         self.train_mst_loss = defaultdict(list)
         self.train_mst_metric = defaultdict(list)
+        self.seg_ids_train, self.images_per_seg_train = \
+            get_image_count_per_seg_for_minibatched_data_from_db(
+                self.source_table)
+        self.fit_validator_train = FitInputValidator(
+            self.source_table, None, self.model_output_table,
+            self.model_arch_table, mb_dep_var_col, mb_indep_var_col,
+            self.num_iterations, 1, False)
+
+        input_tbl_valid(self.model_selection_table, self.module_name)
+        output_tbl_valid(self.model_info_table, self.module_name)
         if self.validation_table:
             self.valid_mst_metric_eval_time = defaultdict(list)
             self.valid_mst_loss = defaultdict(list)
             self.valid_mst_metric = defaultdict(list)
+            self.seg_ids_valid, self.images_per_seg_valid = \
+                get_image_count_per_seg_for_minibatched_data_from_db(
+                    self.validation_table)
+            self.fit_validator_valid = FitInputValidator(
+                self.validation_table, None, self.model_output_table,
+                self.model_arch_table, mb_dep_var_col, mb_indep_var_col,
+                self.num_iterations, 1, False)
         self.mst_weights = 'mst_weights' + unique_string()
-
-        self.fit_validator = FitInputValidator(
-            self.source_table, None, self.model_output_table,
-            self.model_arch_table, mb_dep_var_col, mb_indep_var_col,
-            self.num_iterations, 1, False)
-        input_tbl_valid(self.model_selection_table, self.module_name)
-        output_tbl_valid(self.model_info_table, self.module_name)
 
         self.msts = self.query_msts()
         random.shuffle(self.msts)
@@ -119,9 +130,6 @@ class FitMultipleModel():
         self.dist_keys = self.query_dist_keys()
         self.grand_schedule = self.generate_schedule()
 
-        self.seg_ids_train, self.images_per_seg_train = \
-            get_image_count_per_seg_for_minibatched_data_from_db(
-                self.source_table)
         self.segments_per_host, self.gpus_per_host = get_segments_and_gpus(
             gpus_per_host)
         self.create_model_output_table()
@@ -158,6 +166,18 @@ class FitMultipleModel():
     def evaluate_model(self, epoch, table, is_train):
         res = self.query_weights()
         res_map = {x['mst_key']: x['weights'] for x in res if x['weights']}
+        if is_train:
+            mst_metric_eval_time = self.train_mst_metric_eval_time
+            mst_loss = self.train_mst_loss
+            mst_metric = self.train_mst_metric
+            seg_ids = self.seg_ids_train
+            images_per_seg = self.images_per_seg_train
+        else:
+            mst_metric_eval_time = self.valid_mst_metric_eval_time
+            mst_loss = self.valid_mst_loss
+            mst_metric = self.valid_mst_metric
+            seg_ids = self.seg_ids_valid
+            images_per_seg = self.images_per_seg_valid
         for mst in self.msts:
             model_arch = self.query_arch(mst[self.model_id_col]
                                          )[ModelArchSchema.MODEL_ARCH]
@@ -172,19 +192,13 @@ class FitMultipleModel():
                 serialized_weights,
                 self.gpus_per_host,
                 self.segments_per_host,
-                self.seg_ids_train,
-                self.images_per_seg_train, [], [], epoch, True)
+                seg_ids,
+                images_per_seg, [], [], epoch, True)
             metric_eval_time, metric, loss = loss_metric
-            if is_train:
-                self.train_mst_metric_eval_time[mst[self.mst_key_col]] \
-                    .append(metric_eval_time)
-                self.train_mst_loss[mst[self.mst_key_col]].append(loss)
-                self.train_mst_metric[mst[self.mst_key_col]].append(metric)
-            else:
-                self.valid_mst_metric_eval_time[mst[self.mst_key_col]] \
-                    .append(metric_eval_time)
-                self.valid_mst_loss[mst[self.mst_key_col]].append(loss)
-                self.valid_mst_metric[mst[self.mst_key_col]].append(metric)
+            mst_metric_eval_time[mst[self.mst_key_col]] \
+                .append(metric_eval_time)
+            mst_loss[mst[self.mst_key_col]].append(loss)
+            mst_metric[mst[self.mst_key_col]].append(metric)
 
     def generate_schedule(self):
         grand_schedule = {}
