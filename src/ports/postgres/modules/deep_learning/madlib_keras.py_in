@@ -439,6 +439,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
         return state
     start_transition = time.time()
     SD = kwargs['SD']
+    plpy.info("Starting training")
     device_name = get_device_name_and_set_cuda_env(gpus_per_host,
                                                    current_seg_id)
     # Cerebro state has the weights passed from the previous segment
@@ -468,6 +469,7 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     plpy.info("fit: Model:{}".format(segment_model))
     agg_image_count = madlib_keras_serializer.get_image_count_from_state(state)
     if not state: # first row each iteration
+        plpy.info("Updating model")
         update_model(segment_model, prev_serialized_weights)
 
     # Prepare the data

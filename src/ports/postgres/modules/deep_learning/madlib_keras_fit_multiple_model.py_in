@@ -115,7 +115,7 @@ class FitMultipleModel():
 
         self.msts = self.query_msts()
         random.shuffle(self.msts)
-
+        plpy.info(msts)
         self.dist_keys = self.query_dist_keys()
         self.grand_schedule = self.generate_schedule()
 
