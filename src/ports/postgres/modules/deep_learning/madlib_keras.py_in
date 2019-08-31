@@ -440,6 +440,8 @@ def fit_transition(state, dependent_var, independent_var, model_architecture,
     start_transition = time.time()
     SD = kwargs['SD']
     plpy.info("Starting training")
+    plpy.info("compile_params:{}".format(compile_params))
+    plpy.info("fit_params:{}".format(fit_params))
     device_name = get_device_name_and_set_cuda_env(gpus_per_host,
                                                    current_seg_id)
     # Cerebro state has the weights passed from the previous segment
