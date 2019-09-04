@@ -65,6 +65,7 @@ mb_indep_var_col = MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL
 class ModelSelectionSchema:
     MST_KEY = 'mst_key'
     MODEL_ID = ModelArchSchema.MODEL_ID
+    MODEL_ARCH_TABLE = 'model_arch_table'
     COMPILE_PARAMS = 'compile_params'
     FIT_PARAMS = 'fit_params'
     col_types = ('SERIAL', 'INTEGER', 'VARCHAR', 'VARCHAR')
@@ -98,6 +99,7 @@ class FitMultipleModel():
         self.model_id_col = ModelSelectionSchema.MODEL_ID
         self.compile_params_col = ModelSelectionSchema.COMPILE_PARAMS
         self.fit_params_col = ModelSelectionSchema.FIT_PARAMS
+        self.model_arch_table_col = ModelSelectionSchema.MODEL_ARCH_TABLE
         self.train_mst_metric_eval_time = defaultdict(list)
         self.train_mst_loss = defaultdict(list)
         self.train_mst_metric = defaultdict(list)
@@ -121,11 +123,16 @@ class FitMultipleModel():
         self.mst_weights = 'mst_weights' + unique_string()
 
         self.msts = self.query_msts()
-        random.shuffle(self.msts)
-        plpy.info(self.msts)
         self.dist_keys = self.query_dist_keys()
-        self.grand_schedule = self.generate_schedule()
-
+        if len(self.msts) < len(self.dist_keys):
+            self.msts_for_schedule = self.msts + [None] * \
+                (len(self.dist_keys) - len(self.msts))
+        else:
+            self.msts_for_schedule = self.msts
+        random.shuffle(self.msts_for_schedule)
+        plpy.info(self.msts)
+        self.grand_schedule = self.generate_schedule(self.msts_for_schedule)
+        plpy.info(self.grand_schedule)
         self.segments_per_host, self.gpus_per_host = get_segments_and_gpus(
             gpus_per_host)
         self.create_model_output_table()
@@ -203,10 +210,10 @@ class FitMultipleModel():
             mst_loss[mst[self.mst_key_col]].append(loss)
             mst_metric[mst[self.mst_key_col]].append(metric)
 
-    def generate_schedule(self):
+    def generate_schedule(self, msts):
         grand_schedule = {}
         for index, dist_key in enumerate(self.dist_keys):
-            grand_schedule[dist_key] = rotate(self.msts, index)
+            grand_schedule[dist_key] = rotate(msts, index)
         return grand_schedule
 
     def query_arch(self, model_id):
@@ -215,7 +222,7 @@ class FitMultipleModel():
                            """.format(ModelArchSchema.MODEL_ARCH,
                                       ModelArchSchema.MODEL_WEIGHTS,
                                       self.model_arch_table,
-                                      ModelArchSchema.MODEL_ID,
+                                      self.model_id_col,
                                       model_id)
         model_arch_result = plpy.execute(model_arch_query)[0]
         return model_arch_result
@@ -239,23 +246,32 @@ class FitMultipleModel():
 
     def create_mst_schedule_table(self, mst_row):
         mst_temp_query = """DROP TABLE IF EXISTS mst_current_schedule;
-                            CREATE TABLE mst_current_schedule({self.model_id_col} INTEGER,
+                            CREATE TEMP TABLE mst_current_schedule({self.model_id_col} INTEGER,
                                                                {self.compile_params_col} VARCHAR,
                                                                {self.fit_params_col} VARCHAR,
                                                                dist_key INTEGER,
-                                                               {self.mst_key_col} INTEGER primary key)
+                                                               {self.mst_key_col} INTEGER)
                          """.format(**locals())
         plpy.execute(mst_temp_query)
         for mst, dist_key in zip(mst_row, self.dist_keys):
+            if mst:
+                model_id = mst[self.model_id_col]
+                compile_params = mst[self.compile_params_col]
+                fit_params = mst[self.fit_params_col]
+                mst_key = mst[self.mst_key_col]
+            else:
+                model_id = "NULL"
+                compile_params = "NULL"
+                fit_params = "NULL"
+                mst_key = "NULL"
             mst_insert_query = """
                                 INSERT INTO mst_current_schedule
-                                    VALUES ({},
-                                            $madlib${}$madlib$,
-                                            $madlib${}$madlib$,
-                                            {},
-                                            {})
-                                """.format(mst[self.model_id_col], mst[self.compile_params_col],
-                                           mst[self.fit_params_col], dist_key, mst[self.mst_key_col])
+                                    VALUES ({model_id},
+                                            $madlib${compile_params}$madlib$,
+                                            $madlib${fit_params}$madlib$,
+                                            {dist_key},
+                                            {mst_key})
+                                """.format(**locals())
             plpy.execute(mst_insert_query)
 
     def create_model_output_table(self):
@@ -334,7 +350,7 @@ class FitMultipleModel():
             plpy.execute(info_table_insert_query)
 
     def create_model_summary_table(self):
-        src_summary_dict = get_source_summary_table_dict(self.fit_validator)
+        src_summary_dict = get_source_summary_table_dict(self.fit_validator_train)
         class_values = src_summary_dict['class_values']
         dep_vartype = src_summary_dict['dep_vartype']
         dependent_varname = \
@@ -433,15 +449,14 @@ class FitMultipleModel():
                 self.update_info_table(mst, False)
 
     def run_training(self):
-        # TODO: fix distributed by
         mst_weights_query = """
             DROP TABLE IF EXISTS {self.mst_weights};
-            CREATE TEMP TABLE {self.mst_weights} AS
+            CREATE TABLE {self.mst_weights} AS
                 SELECT mst.*, wgh.weights, model_arch.model_arch
                 FROM
-                    mst_current_schedule mst JOIN {self.model_output_table} wgh
+                    mst_current_schedule mst LEFT JOIN {self.model_output_table} wgh
                     ON mst.mst_key = wgh.mst_key
-                        JOIN {self.model_arch_table} model_arch
+                        LEFT JOIN {self.model_arch_table} model_arch
                         ON mst.model_id = model_arch.model_id
                 DISTRIBUTED BY (dist_key)
         """.format(**locals())
@@ -464,7 +479,8 @@ class FitMultipleModel():
                                                       )::BYTEA AS weights,
                 {self.mst_weights}.mst_key AS mst_key
                 FROM {self.source_table} src JOIN {self.mst_weights}
-                USING (dist_key)
+                    USING (dist_key)
+                WHERE {self.mst_weights}.mst_key IS NOT NULL
                 GROUP BY src.dist_key, {self.mst_weights}.mst_key
             """.format(mb_dep_var_col=mb_dep_var_col,
                        mb_indep_var_col=mb_indep_var_col,
