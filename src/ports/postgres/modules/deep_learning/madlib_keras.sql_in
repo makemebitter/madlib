@@ -1863,6 +1863,46 @@ CREATE AGGREGATE MADLIB_SCHEMA.fit_step(
     FINALFUNC=MADLIB_SCHEMA.fit_final
 );
 
+DROP AGGREGATE IF EXISTS MADLIB_SCHEMA.fit_step_ctq(
+    BYTEA,
+    BYTEA,
+    TEXT,
+    TEXT,
+    TEXT,
+    TEXT,
+    TEXT,
+    INTEGER,
+    INTEGER[],
+    INTEGER,
+    INTEGER,
+    INTEGER[],
+    BOOLEAN,
+    INTEGER[],
+    BYTEA,
+    BOOLEAN);
+CREATE AGGREGATE MADLIB_SCHEMA.fit_step_ctq(
+    /* dep_var */                BYTEA,
+    /* ind_var */                BYTEA,
+    /* dep_var_shape */          INTEGER[],
+    /* ind_var_shape */          INTEGER[],
+    /* model_architecture */     TEXT,
+    /* compile_params */         TEXT,
+    /* fit_params */             TEXT,
+    /* dist_key */               INTEGER,
+    /* dist_key_mapping */       INTEGER[],
+    /* current_seg_id */         INTEGER,
+    /* segments_per_host */      INTEGER,
+    /* images_per_seg */         INTEGER[],
+    /* use_gpus  */              BOOLEAN,
+    /* segments_per_host  */     INTEGER[],
+    /* serialized_weights */     BYTEA,
+    /* is_final_iteration */     BOOLEAN
+)(
+    STYPE=BYTEA,
+    SFUNC=MADLIB_SCHEMA.fit_transition,
+    prefunc=MADLIB_SCHEMA.fit_merge
+);
+
 CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.madlib_keras_predict(
     model_table             VARCHAR,
     test_table              VARCHAR,

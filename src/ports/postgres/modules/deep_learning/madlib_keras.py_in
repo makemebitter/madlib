@@ -187,6 +187,26 @@ def fit(schema_madlib, source_table, model, model_arch_table,
         FROM {source_table}
         """.format(**locals()), ["bytea", "boolean", "bytea"])
 
+    plpy.info("""
+        SELECT {schema_madlib}.fit_step(
+            {mb_dep_var_col},
+            {mb_indep_var_col},
+            {dep_shape_col},
+            {ind_shape_col},
+            $MAD${model_arch}$MAD$::TEXT,
+            {compile_params_to_pass}::TEXT,
+            {fit_params_to_pass}::TEXT,
+            {dist_key_col},
+            ARRAY{dist_key_mapping},
+            {gp_segment_id_col},
+            {segments_per_host},
+            ARRAY{images_per_seg_train},
+            {use_gpus}::BOOLEAN,
+            ARRAY{accessible_gpus_for_seg}
+        ) AS iteration_result
+        FROM {source_table}
+        """.format(**locals()))
+
     # Define the state for the model and loss/metric storage lists
     training_loss, training_metrics, metrics_elapsed_time = [], [], []
     metrics_iters = []
