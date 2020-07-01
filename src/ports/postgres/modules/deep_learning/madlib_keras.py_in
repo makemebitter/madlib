@@ -706,6 +706,16 @@ def fit_final(state, **kwargs):
     weights /= image_count
     return madlib_keras_serializer.serialize_nd_weights(weights)
 
+def fit_final_ctq(state, **kwargs):
+    # Return if called early
+    if not state:
+        return state
+
+    image_count, weights = madlib_keras_serializer.deserialize_as_image_1d_weights(state)
+    if image_count == 0:
+        plpy.error("fit_final: Total images processed is 0")
+
+    return madlib_keras_serializer.serialize_nd_weights(weights)
 
 def evaluate(schema_madlib, model_table, test_table, output_table,
              use_gpus, mst_key, **kwargs):
@@ -929,6 +939,8 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
 
     return state
 
+
+
 def internal_keras_eval_merge(state1, state2, **kwargs):
     # If either state is None, return the other one
     if not state1 or not state2:
@@ -954,6 +966,15 @@ def internal_keras_eval_final(state, **kwargs):
     loss /= image_count
     metric /= image_count
 
+    return loss, metric
+
+def internal_keras_eval_final_ctq(state, **kwargs):
+    loss, metric, image_count = state
+    # plpy.info("image_count: {}".format(image_count))
+    if image_count == 0:
+        plpy.error("internal_keras_eval_final: Total images processed is 0")
+    loss /= image_count
+    metric /= image_count
     return loss, metric
 
 def fit_help(schema_madlib, message, **kwargs):
