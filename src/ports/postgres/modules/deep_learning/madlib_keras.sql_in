@@ -1887,11 +1887,11 @@ CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.fit_transition_ctq(
     images_per_seg             INTEGER[],
     use_gpus                   BOOLEAN,
     accessible_gpus_for_seg               INTEGER[],
-    prev_serialized_weights    BYTEA,
+    prev_serialized_weights    TEXT,
     is_final_iteration         BOOLEAN
 ) RETURNS BYTEA AS $$
 PythonFunctionBodyOnlyNoSchema(`deep_learning', `madlib_keras')
-    return madlib_keras.fit_transition(is_multiple_model = True, **globals())
+    return madlib_keras.fit_transition(is_multiple_model=True, is_ctq=True, **globals())
 $$ LANGUAGE plpythonu
 m4_ifdef(`__HAS_FUNCTION_PROPERTIES__', `NO SQL', `');
 
@@ -1910,7 +1910,7 @@ DROP AGGREGATE IF EXISTS MADLIB_SCHEMA.fit_step_ctq(
     INTEGER[],
     BOOLEAN,
     INTEGER[],
-    BYTEA,
+    TEXT,
     BOOLEAN);
 CREATE AGGREGATE MADLIB_SCHEMA.fit_step_ctq(
     /* dep_var */                BYTEA,
@@ -1927,7 +1927,7 @@ CREATE AGGREGATE MADLIB_SCHEMA.fit_step_ctq(
     /* images_per_seg */         INTEGER[],
     /* use_gpus  */              BOOLEAN,
     /* segments_per_host  */     INTEGER[],
-    /* serialized_weights */     BYTEA,
+    /* serialized_weights */     TEXT,
     /* is_final_iteration */     BOOLEAN
 )(
     STYPE=BYTEA,
@@ -2151,6 +2151,29 @@ PythonFunctionBodyOnlyNoSchema(`deep_learning', `madlib_keras')
 $$ LANGUAGE plpythonu
 m4_ifdef(`__HAS_FUNCTION_PROPERTIES__', `NO SQL', `');
 
+CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.internal_keras_eval_transition_ctq(
+    state                              REAL[3],
+    dependent_var                      BYTEA,
+    independent_var                    BYTEA,
+    dependent_var_shape                INTEGER[],
+    independent_var_shape              INTEGER[],
+    model_architecture                 TEXT,
+    serialized_weights                 TEXT,
+    compile_params                     TEXT,
+    dist_key                           INTEGER,
+    dist_key_mapping                   INTEGER[],
+    current_seg_id                     INTEGER,
+    segments_per_host                  INTEGER,
+    images_per_seg                     INTEGER[],
+    use_gpus                           BOOLEAN,
+    accessible_gpus_for_seg                       INTEGER[],
+    is_final_iteration                 BOOLEAN
+) RETURNS REAL[3] AS $$
+PythonFunctionBodyOnlyNoSchema(`deep_learning', `madlib_keras')
+    return madlib_keras.internal_keras_eval_transition(is_ctq=True, **globals())
+$$ LANGUAGE plpythonu
+m4_ifdef(`__HAS_FUNCTION_PROPERTIES__', `NO SQL', `');
+
 CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.internal_keras_eval_merge(
     state1          REAL[3],
     state2          REAL[3]
@@ -2224,7 +2247,7 @@ DROP AGGREGATE IF EXISTS MADLIB_SCHEMA.internal_keras_evaluate_ctq(
                                        INTEGER[],
                                        INTEGER[],
                                        TEXT,
-                                       BYTEA,
+                                       TEXT,
                                        TEXT,
                                        INTEGER,
                                        INTEGER[],
@@ -2241,7 +2264,7 @@ CREATE AGGREGATE MADLIB_SCHEMA.internal_keras_evaluate_ctq(
     /* dependent_var_shape */       INTEGER[],
     /* independent_var_shape */     INTEGER[],
     /* model_architecture */        TEXT,
-    /* model_weights */             BYTEA,
+    /* model_weights */             TEXT,
     /* compile_params */            TEXT,
     /* dist_key */                  INTEGER,
     /* dist_key_mapping */          INTEGER[],
@@ -2254,7 +2277,7 @@ CREATE AGGREGATE MADLIB_SCHEMA.internal_keras_evaluate_ctq(
 )(
     STYPE=REAL[3],
     INITCOND='{0,0,0}',
-    SFUNC=MADLIB_SCHEMA.internal_keras_eval_transition,
+    SFUNC=MADLIB_SCHEMA.internal_keras_eval_transition_ctq,
     prefunc=MADLIB_SCHEMA.internal_keras_eval_merge,
     FINALFUNC=MADLIB_SCHEMA.internal_keras_eval_final_ctq
 );
