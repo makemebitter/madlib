@@ -14,7 +14,7 @@ readarray -t hostsarr < $hosts
 
 for host in "${hostsarr[@]}"; do
     echo "Syncing $host ..."
-    rsync -ar --update --delete "$root/build" "gpadmin@$host:$root/build"
+    rsync -ar --update "$root/build" "gpadmin@$host:$root"
 done
 
 # Install
