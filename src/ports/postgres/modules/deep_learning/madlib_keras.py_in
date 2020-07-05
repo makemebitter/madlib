@@ -482,7 +482,7 @@ def fit_transition(state, dependent_var, independent_var, dependent_var_shape,
                    compile_params, fit_params, dist_key, dist_key_mapping,
                    current_seg_id, segments_per_host, images_per_seg, use_gpus,
                    accessible_gpus_for_seg, prev_serialized_weights, is_final_iteration=True,
-                   is_multiple_model=False, **kwargs):
+                   is_multiple_model=False, is_ctq=False, **kwargs):
     """
     This transition function is common for madlib_keras_fit() and
     madlib_keras_fit_multiple_model(). The important difference between
@@ -508,7 +508,12 @@ def fit_transition(state, dependent_var, independent_var, dependent_var_shape,
                                                   accessible_gpus_for_seg[current_seg_id],
                                                   segments_per_host,
                                                   model_architecture, compile_params)
+    
+
     if not state:
+        if is_ctq:
+            with open(prev_serialized_weights, rb) as f:
+                prev_serialized_weights = f.read()
         agg_image_count = 0
         set_model_weights(segment_model, prev_serialized_weights)
     else:
