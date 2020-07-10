@@ -529,7 +529,7 @@ def fit_transition(state, dependent_var, independent_var, dependent_var_shape,
         if is_ctq:
             with open(prev_serialized_weights, 'rb') as f:
                 weights = f.read()
-        prev_serialized_weights = weights
+            prev_serialized_weights = weights
         agg_image_count = 0
         set_model_weights(segment_model, prev_serialized_weights)
     else:
