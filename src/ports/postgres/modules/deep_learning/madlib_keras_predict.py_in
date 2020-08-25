@@ -24,7 +24,7 @@ from keras import backend as K
 from keras.layers import *
 from keras.models import *
 from keras.optimizers import *
-
+import tensorflow as tf
 from model_arch_info import *
 from madlib_keras_helper import *
 from madlib_keras_validator import *
@@ -314,13 +314,22 @@ def internal_keras_predict(independent_var, model_architecture, model_weights,
         independent_var = expand_input_dims(independent_var)
         independent_var /= normalizing_const
 
-        with K.tf.device(device_name):
-            probs = model.predict(independent_var)
-        # probs is a list containing a list of probability values, of all
-        # class levels. Since we are assuming each input is a single image,
-        # and not mini-batched, this list contains exactly one list in it,
-        # so return back the first list in probs.
-        result = probs[0]
+        if is_response:
+            with tf.device(device_name):
+                y_prob = model.predict(independent_var)
+                proba_argmax = y_prob.argmax(axis=-1)
+            # proba_argmax is a list with exactly one element in it. That element
+            # refers to the index containing the largest probability value in the
+            # output of Keras' predict function.
+            result = proba_argmax
+        else:
+            with tf.device(device_name):
+                probs = model.predict(independent_var)
+            # probs is a list containing a list of probability values, of all
+            # class levels. Since we are assuming each input is a single image,
+            # and not mini-batched, this list contains exactly one list in it,
+            # so return back the first list in probs.
+            result = probs[0]
         total_images = get_image_count_per_seg_from_array(seg_ids.index(current_seg_id),
                                                           images_per_seg)
 
