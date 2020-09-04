@@ -42,7 +42,10 @@ from utilities.utilities import madlib_version
 from utilities.utilities import unique_string
 from utilities.validate_args import get_expr_type
 from utilities.control import MinWarning
+from utilities.utilities import timeit_factory
+from utilities.utilities import logsc
 import tensorflow as tf
+
 
 class SD_STORE:
     SESS = 'sess'
@@ -75,169 +78,172 @@ def get_init_model_and_sess(SD, device_name, gpu_count, segments_per_host,
         SD_STORE.init_SD(SD, sess, segment_model)
     return segment_model, sess
 
+
+@timeit_factory()
 @MinWarning("warning")
 def fit(schema_madlib, source_table, model, model_arch_table,
         model_id, compile_params, fit_params, num_iterations,
         use_gpus, validation_table=None,
         metrics_compute_frequency=None, warm_start=False, name="",
         description="", **kwargs):
+    with logsc("MA fit initialization"):
+        module_name = 'madlib_keras_fit'
+        fit_params = "" if not fit_params else fit_params
+        _assert(compile_params, "Compile parameters cannot be empty or NULL.")
 
-    module_name = 'madlib_keras_fit'
-    fit_params = "" if not fit_params else fit_params
-    _assert(compile_params, "Compile parameters cannot be empty or NULL.")
+        mb_dep_var_col = MINIBATCH_OUTPUT_DEPENDENT_COLNAME_DL
+        mb_indep_var_col = MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL
 
-    mb_dep_var_col = MINIBATCH_OUTPUT_DEPENDENT_COLNAME_DL
-    mb_indep_var_col = MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL
+        dep_shape_col = add_postfix(
+            MINIBATCH_OUTPUT_DEPENDENT_COLNAME_DL, "_shape")
+        ind_shape_col = add_postfix(
+            MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL, "_shape")
 
-    dep_shape_col = add_postfix(
-        MINIBATCH_OUTPUT_DEPENDENT_COLNAME_DL, "_shape")
-    ind_shape_col = add_postfix(
-        MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL, "_shape")
+        segments_per_host = get_segments_per_host()
+        use_gpus = use_gpus if use_gpus else False
+        if use_gpus:
+            accessible_gpus_for_seg = get_accessible_gpus_for_seg(schema_madlib, segments_per_host, module_name)
+        else:
+            accessible_gpus_for_seg = get_seg_number()*[0]
 
-    segments_per_host = get_segments_per_host()
-    use_gpus = use_gpus if use_gpus else False
-    if use_gpus:
-        accessible_gpus_for_seg = get_accessible_gpus_for_seg(schema_madlib, segments_per_host, module_name)
-    else:
-        accessible_gpus_for_seg = get_seg_number()*[0]
-
-    fit_validator = FitInputValidator(
-        source_table, validation_table, model, model_arch_table,
-        model_id, mb_dep_var_col, mb_indep_var_col,
-        num_iterations, metrics_compute_frequency, warm_start,
-        use_gpus, accessible_gpus_for_seg)
-    if metrics_compute_frequency is None:
-        metrics_compute_frequency = num_iterations
-
-
-    warm_start = bool(warm_start)
-
-    # The following two times must be recorded together.
-    metrics_elapsed_start_time = time.time()
-    start_training_time = datetime.datetime.now()
-    #TODO add a unit test for this in a future PR
-    # save the original value of the env variable so that we can reset it later.
-    original_cuda_env = None
-    if CUDA_VISIBLE_DEVICES_KEY in os.environ:
-        original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
-
-    # Get the serialized master model
-    start_deserialization = time.time()
-    model_arch, model_weights = get_model_arch_weights(model_arch_table, model_id)
-    num_classes = get_num_classes(model_arch)
-    input_shape = get_input_shape(model_arch)
-    fit_validator.validate_input_shapes(input_shape)
-    dist_key_col = '0' if is_platform_pg() else DISTRIBUTION_KEY_COLNAME
-    gp_segment_id_col = '0' if is_platform_pg() else GP_SEGMENT_ID_COLNAME
-
-    serialized_weights = get_initial_weights(model, model_arch, model_weights,
-                                             warm_start, use_gpus, accessible_gpus_for_seg)
-    # Compute total images on each segment
-    dist_key_mapping, images_per_seg_train = get_image_count_per_seg_for_minibatched_data_from_db(source_table)
+        fit_validator = FitInputValidator(
+            source_table, validation_table, model, model_arch_table,
+            model_id, mb_dep_var_col, mb_indep_var_col,
+            num_iterations, metrics_compute_frequency, warm_start,
+            use_gpus, accessible_gpus_for_seg)
+        if metrics_compute_frequency is None:
+            metrics_compute_frequency = num_iterations
 
 
-    if validation_table:
-        seg_ids_val, images_per_seg_val = get_image_count_per_seg_for_minibatched_data_from_db(validation_table)
+        warm_start = bool(warm_start)
 
-    # Construct validation dataset if provided
-    validation_set_provided = bool(validation_table)
-    validation_metrics = []; validation_loss = []
+        # The following two times must be recorded together.
+        metrics_elapsed_start_time = time.time()
+        start_training_time = datetime.datetime.now()
+        #TODO add a unit test for this in a future PR
+        # save the original value of the env variable so that we can reset it later.
+        original_cuda_env = None
+        if CUDA_VISIBLE_DEVICES_KEY in os.environ:
+            original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
 
-    # Prepare the SQL for running distributed training via UDA
-    compile_params_to_pass = "$madlib$" + compile_params + "$madlib$"
-    fit_params_to_pass = "$madlib$" + fit_params + "$madlib$"
-    run_training_iteration = plpy.prepare("""
-        SELECT {schema_madlib}.fit_step(
-            {mb_dep_var_col},
-            {mb_indep_var_col},
-            {dep_shape_col},
-            {ind_shape_col},
-            $MAD${model_arch}$MAD$::TEXT,
-            {compile_params_to_pass}::TEXT,
-            {fit_params_to_pass}::TEXT,
-            {dist_key_col},
-            ARRAY{dist_key_mapping},
-            {gp_segment_id_col},
-            {segments_per_host},
-            ARRAY{images_per_seg_train},
-            {use_gpus}::BOOLEAN,
-            ARRAY{accessible_gpus_for_seg},
-            $1,
-            $2
-        ) AS iteration_result
-        FROM {source_table}
-        """.format(**locals()), ["bytea", "boolean"])
+        # Get the serialized master model
+        start_deserialization = time.time()
+        model_arch, model_weights = get_model_arch_weights(model_arch_table, model_id)
+        num_classes = get_num_classes(model_arch)
+        input_shape = get_input_shape(model_arch)
+        fit_validator.validate_input_shapes(input_shape)
+        dist_key_col = '0' if is_platform_pg() else DISTRIBUTION_KEY_COLNAME
+        gp_segment_id_col = '0' if is_platform_pg() else GP_SEGMENT_ID_COLNAME
 
-    plpy.info("""
-        SELECT {schema_madlib}.fit_step(
-            {mb_dep_var_col},
-            {mb_indep_var_col},
-            {dep_shape_col},
-            {ind_shape_col},
-            $MAD${model_arch}$MAD$::TEXT,
-            {compile_params_to_pass}::TEXT,
-            {fit_params_to_pass}::TEXT,
-            {dist_key_col},
-            ARRAY{dist_key_mapping},
-            {gp_segment_id_col},
-            {segments_per_host},
-            ARRAY{images_per_seg_train},
-            {use_gpus}::BOOLEAN,
-            ARRAY{accessible_gpus_for_seg}
-        ) AS iteration_result
-        FROM {source_table}
-        """.format(**locals()))
+        serialized_weights = get_initial_weights(model, model_arch, model_weights,
+                                                warm_start, use_gpus, accessible_gpus_for_seg)
+        # Compute total images on each segment
+        dist_key_mapping, images_per_seg_train = get_image_count_per_seg_for_minibatched_data_from_db(source_table)
 
-    # Define the state for the model and loss/metric storage lists
-    training_loss, training_metrics, metrics_elapsed_time = [], [], []
-    metrics_iters = []
 
-    # get the size of serialized model weights string in KB
-    model_size = sys.getsizeof(serialized_weights)/1024.0
+        if validation_table:
+            seg_ids_val, images_per_seg_val = get_image_count_per_seg_for_minibatched_data_from_db(validation_table)
 
+        # Construct validation dataset if provided
+        validation_set_provided = bool(validation_table)
+        validation_metrics = []; validation_loss = []
+
+        # Prepare the SQL for running distributed training via UDA
+        compile_params_to_pass = "$madlib$" + compile_params + "$madlib$"
+        fit_params_to_pass = "$madlib$" + fit_params + "$madlib$"
+        run_training_iteration = plpy.prepare("""
+            SELECT {schema_madlib}.fit_step(
+                {mb_dep_var_col},
+                {mb_indep_var_col},
+                {dep_shape_col},
+                {ind_shape_col},
+                $MAD${model_arch}$MAD$::TEXT,
+                {compile_params_to_pass}::TEXT,
+                {fit_params_to_pass}::TEXT,
+                {dist_key_col},
+                ARRAY{dist_key_mapping},
+                {gp_segment_id_col},
+                {segments_per_host},
+                ARRAY{images_per_seg_train},
+                {use_gpus}::BOOLEAN,
+                ARRAY{accessible_gpus_for_seg},
+                $1,
+                $2
+            ) AS iteration_result
+            FROM {source_table}
+            """.format(**locals()), ["bytea", "boolean"])
+
+        plpy.info("""
+            SELECT {schema_madlib}.fit_step(
+                {mb_dep_var_col},
+                {mb_indep_var_col},
+                {dep_shape_col},
+                {ind_shape_col},
+                $MAD${model_arch}$MAD$::TEXT,
+                {compile_params_to_pass}::TEXT,
+                {fit_params_to_pass}::TEXT,
+                {dist_key_col},
+                ARRAY{dist_key_mapping},
+                {gp_segment_id_col},
+                {segments_per_host},
+                ARRAY{images_per_seg_train},
+                {use_gpus}::BOOLEAN,
+                ARRAY{accessible_gpus_for_seg}
+            ) AS iteration_result
+            FROM {source_table}
+            """.format(**locals()))
+
+        # Define the state for the model and loss/metric storage lists
+        training_loss, training_metrics, metrics_elapsed_time = [], [], []
+        metrics_iters = []
+
+        # get the size of serialized model weights string in KB
+        model_size = sys.getsizeof(serialized_weights)/1024.0
     # Run distributed training for specified number of iterations
     for i in range(1, num_iterations+1):
-        start_iteration = time.time()
-        is_final_iteration = (i == num_iterations)
-        serialized_weights = plpy.execute(run_training_iteration,
-                                        [serialized_weights, is_final_iteration]
-                                        )[0]['iteration_result']
-        end_iteration = time.time()
+        with logsc("MA training epoch-{}".format(i)):
+            start_iteration = time.time()
+            is_final_iteration = (i == num_iterations)
+            serialized_weights = plpy.execute(run_training_iteration,
+                                            [serialized_weights, is_final_iteration]
+                                            )[0]['iteration_result']
+            end_iteration = time.time()
         info_str = "\tTime for training in iteration {0}: {1} sec".format(i,
             end_iteration - start_iteration)
 
         if should_compute_metrics_this_iter(i, metrics_compute_frequency,
                                             num_iterations):
             # Compute loss/accuracy for training data.
-            compute_out = compute_loss_and_metrics(
-                schema_madlib, source_table, compile_params_to_pass, model_arch,
-                serialized_weights, use_gpus, accessible_gpus_for_seg, dist_key_mapping,
-                images_per_seg_train, training_metrics, training_loss, i, is_final_iteration)
-            metrics_iters.append(i)
-            compute_time, compute_metrics, compute_loss = compute_out
+            with logsc("MA training metric epoch-{}".format(i)):
+                compute_out = compute_loss_and_metrics(
+                    schema_madlib, source_table, compile_params_to_pass, model_arch,
+                    serialized_weights, use_gpus, accessible_gpus_for_seg, dist_key_mapping,
+                    images_per_seg_train, training_metrics, training_loss, i, is_final_iteration)
+                metrics_iters.append(i)
+                compute_time, compute_metrics, compute_loss = compute_out
 
-            info_str += "\n\tTime for evaluating training dataset in "\
-                        "iteration {0}: {1} sec\n".format(i, compute_time)
-            info_str += "\tTraining set metric after iteration {0}: {1}\n".format(
-                i, compute_metrics)
-            info_str += "\tTraining set loss after iteration {0}: {1}".format(
-                i, compute_loss)
-
+                info_str += "\n\tTime for evaluating training dataset in "\
+                            "iteration {0}: {1} sec\n".format(i, compute_time)
+                info_str += "\tTraining set metric after iteration {0}: {1}\n".format(
+                    i, compute_metrics)
+                info_str += "\tTraining set loss after iteration {0}: {1}".format(
+                    i, compute_loss)
             if validation_set_provided:
-                # Compute loss/accuracy for validation data.
-                val_compute_out = compute_loss_and_metrics(
-                    schema_madlib, validation_table, compile_params_to_pass,
-                    model_arch, serialized_weights, use_gpus, accessible_gpus_for_seg,
-                    seg_ids_val, images_per_seg_val, validation_metrics,
-                    validation_loss, i, is_final_iteration)
-                val_compute_time, val_compute_metrics, val_compute_loss = val_compute_out
+                with logsc("MA validation metric epoch-{}".format(i)):
+                    # Compute loss/accuracy for validation data.
+                    val_compute_out = compute_loss_and_metrics(
+                        schema_madlib, validation_table, compile_params_to_pass,
+                        model_arch, serialized_weights, use_gpus, accessible_gpus_for_seg,
+                        seg_ids_val, images_per_seg_val, validation_metrics,
+                        validation_loss, i, is_final_iteration)
+                    val_compute_time, val_compute_metrics, val_compute_loss = val_compute_out
 
-                info_str += "\n\tTime for evaluating validation dataset in "\
-                        "iteration {0}: {1} sec\n".format(i, val_compute_time)
-                info_str += "\tValidation set metric after iteration {0}: {1}\n".format(
-                    i, val_compute_metrics)
-                info_str += "\tValidation set loss after iteration {0}: {1}".format(
-                    i, val_compute_loss)
+                    info_str += "\n\tTime for evaluating validation dataset in "\
+                            "iteration {0}: {1} sec\n".format(i, val_compute_time)
+                    info_str += "\tValidation set metric after iteration {0}: {1}\n".format(
+                        i, val_compute_metrics)
+                    info_str += "\tValidation set loss after iteration {0}: {1}".format(
+                        i, val_compute_loss)
 
             metrics_elapsed_end_time = time.time()
             metrics_elapsed_time.append(
@@ -477,6 +483,7 @@ def update_model(segment_model, prev_serialized_weights):
         prev_serialized_weights, model_shapes)
     segment_model.set_weights(model_weights)
 
+@timeit_factory()
 def fit_transition(state, dependent_var, independent_var, dependent_var_shape,
                    independent_var_shape, model_architecture,
                    compile_params, fit_params, dist_key, dist_key_mapping,
@@ -499,46 +506,48 @@ def fit_transition(state, dependent_var, independent_var, dependent_var_shape,
         b. keras session is cleared at the end of the final iteration,
         i.e, last row of last iteration.
     """
-    if not independent_var or not dependent_var:
-        return state
-    SD = kwargs['SD']
-    device_name = get_device_name_and_set_cuda_env(accessible_gpus_for_seg[current_seg_id], current_seg_id)
+    with logsc("fit_transition initialization"):
+        if not independent_var or not dependent_var:
+            return state
+        SD = kwargs['SD']
+        device_name = get_device_name_and_set_cuda_env(accessible_gpus_for_seg[current_seg_id], current_seg_id)
 
-    segment_model, sess = get_init_model_and_sess(SD, device_name,
-                                                  accessible_gpus_for_seg[current_seg_id],
-                                                  segments_per_host,
-                                                  model_architecture, compile_params)
-    
-    if not state:
-        if is_ctq:
-            with open(prev_serialized_weights, 'rb') as f:
-                weights = f.read()
-            prev_serialized_weights = weights
-        agg_image_count = 0
-        set_model_weights(segment_model, prev_serialized_weights)
-    else:
-        agg_image_count = float(state)
+        segment_model, sess = get_init_model_and_sess(SD, device_name,
+                                                    accessible_gpus_for_seg[current_seg_id],
+                                                    segments_per_host,
+                                                    model_architecture, compile_params)
+        
+        if not state:
+            if is_ctq:
+                with open(prev_serialized_weights, 'rb') as f:
+                    weights = f.read()
+                prev_serialized_weights = weights
+            agg_image_count = 0
+            set_model_weights(segment_model, prev_serialized_weights)
+        else:
+            agg_image_count = float(state)
 
-    # Prepare the data
-    x_train = np_array_float32(independent_var, independent_var_shape)
-    y_train = np_array_int16(dependent_var, dependent_var_shape)
+        # Prepare the data
+        x_train = np_array_float32(independent_var, independent_var_shape)
+        y_train = np_array_int16(dependent_var, dependent_var_shape)
 
-    # Fit segment model on data
-    #TODO consider not doing this every time
-    fit_params = parse_and_validate_fit_params(fit_params)
-    segment_model.fit(x_train, y_train, **fit_params)
-
-    # Aggregating number of images, loss and accuracy
-    agg_image_count += len(x_train)
-    total_images = get_image_count_per_seg_from_array(dist_key_mapping.index(dist_key),
-                                                      images_per_seg)
-    is_last_row = agg_image_count == total_images
-    return_state = get_state_to_return(segment_model, is_last_row, is_multiple_model,
-                                  agg_image_count, total_images)
-    if is_last_row:
-        if is_final_iteration or is_multiple_model:
-            SD_STORE.clear_SD(SD)
-            clear_keras_session(sess)
+        # Fit segment model on data
+        #TODO consider not doing this every time
+        fit_params = parse_and_validate_fit_params(fit_params)
+    with logsc("Start fit_transition training"):
+        segment_model.fit(x_train, y_train, **fit_params)
+    with logsc("Start fit_transition clearing"):
+        # Aggregating number of images, loss and accuracy
+        agg_image_count += len(x_train)
+        total_images = get_image_count_per_seg_from_array(dist_key_mapping.index(dist_key),
+                                                        images_per_seg)
+        is_last_row = agg_image_count == total_images
+        return_state = get_state_to_return(segment_model, is_last_row, is_multiple_model,
+                                    agg_image_count, total_images)
+        if is_last_row:
+            if is_final_iteration or is_multiple_model:
+                SD_STORE.clear_SD(SD)
+                clear_keras_session(sess)
 
     return return_state
 
@@ -574,6 +583,7 @@ def get_state_to_return(segment_model, is_last_row, is_multiple_model, agg_image
 
     return new_state
 
+@timeit_factory()
 def fit_merge(state1, state2, **kwargs):
 
     # Return if called early
@@ -594,6 +604,7 @@ def fit_merge(state1, state2, **kwargs):
     return madlib_keras_serializer.serialize_state_with_1d_weights(
         image_count, total_weights)
 
+@timeit_factory()
 def fit_final(state, **kwargs):
     # Return if called early
     if not state:
@@ -607,6 +618,7 @@ def fit_final(state, **kwargs):
     weights /= image_count
     return madlib_keras_serializer.serialize_nd_weights(weights)
 
+@timeit_factory()
 def fit_final_ctq(state, **kwargs):
     # Return if called early
     if not state:
@@ -618,54 +630,54 @@ def fit_final_ctq(state, **kwargs):
 
     return madlib_keras_serializer.serialize_nd_weights(weights)
 
+@timeit_factory()
 def evaluate(schema_madlib, model_table, test_table, output_table,
              use_gpus, mst_key, **kwargs):
+    with logsc("evaulate initialization"):
+        module_name = 'madlib_keras_evaluate'
+        is_mult_model = mst_key is not None
+        if test_table:
+            test_summary_table = add_postfix(test_table, "_summary")
+        model_summary_table = None
+        if model_table:
+            model_summary_table = add_postfix(model_table, "_summary")
 
-    module_name = 'madlib_keras_evaluate'
-    is_mult_model = mst_key is not None
-    if test_table:
-        test_summary_table = add_postfix(test_table, "_summary")
-    model_summary_table = None
-    if model_table:
-        model_summary_table = add_postfix(model_table, "_summary")
+        mult_where_clause = ""
+        if is_mult_model:
+            mult_where_clause = "WHERE mst_key = {0}".format(mst_key)
+            model_summary_table = create_summary_view(module_name, model_table, mst_key)
 
-    mult_where_clause = ""
-    if is_mult_model:
-        mult_where_clause = "WHERE mst_key = {0}".format(mst_key)
-        model_summary_table = create_summary_view(module_name, model_table, mst_key)
+        validate_evaluate(module_name, model_table, model_summary_table, test_table, test_summary_table, output_table, is_mult_model)
 
-    validate_evaluate(module_name, model_table, model_summary_table, test_table, test_summary_table, output_table, is_mult_model)
+        segments_per_host = get_segments_per_host()
+        if use_gpus:
+            accessible_gpus_for_seg = get_accessible_gpus_for_seg(schema_madlib, segments_per_host, module_name)
+        else:
+            accessible_gpus_for_seg = get_seg_number()*[0]
 
-    segments_per_host = get_segments_per_host()
-    if use_gpus:
-        accessible_gpus_for_seg = get_accessible_gpus_for_seg(schema_madlib, segments_per_host, module_name)
-    else:
-        accessible_gpus_for_seg = get_seg_number()*[0]
+        model_weights_query = "SELECT model_weights, model_arch FROM {0} {1}".format(
+            model_table, mult_where_clause)
+        res = plpy.execute(model_weights_query)[0]
+        _assert(res, "{0}: The model does not exist.")
+        model_weights = res['model_weights']
+        model_arch = res['model_arch']
 
-    model_weights_query = "SELECT model_weights, model_arch FROM {0} {1}".format(
-        model_table, mult_where_clause)
+        input_shape = get_input_shape(model_arch)
+        InputValidator.validate_input_shape(
+            test_table, MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL, input_shape, 2, True)
 
-    res = plpy.execute(model_weights_query)[0]
-    _assert(res, "{0}: The model does not exist.")
-    model_weights = res['model_weights']
-    model_arch = res['model_arch']
+        compile_params_query = "SELECT compile_params, metrics_type FROM {0}".format(model_summary_table)
+        res = plpy.execute(compile_params_query)[0]
+        metrics_type = res['metrics_type']
+        compile_params = "$madlib$" + res['compile_params'] + "$madlib$"
 
-    input_shape = get_input_shape(model_arch)
-    InputValidator.validate_input_shape(
-        test_table, MINIBATCH_OUTPUT_INDEPENDENT_COLNAME_DL, input_shape, 2, True)
-
-    compile_params_query = "SELECT compile_params, metrics_type FROM {0}".format(model_summary_table)
-    res = plpy.execute(compile_params_query)[0]
-    metrics_type = res['metrics_type']
-    compile_params = "$madlib$" + res['compile_params'] + "$madlib$"
-
-    dist_key_mapping, images_per_seg = get_image_count_per_seg_for_minibatched_data_from_db(test_table)
-
-    loss, metric = \
-        get_loss_metric_from_keras_eval(
-            schema_madlib, test_table, compile_params, model_arch,
-            model_weights, use_gpus, accessible_gpus_for_seg, dist_key_mapping,
-            images_per_seg)
+        dist_key_mapping, images_per_seg = get_image_count_per_seg_for_minibatched_data_from_db(test_table)
+    with logsc("evaluate evaluate"):
+        loss, metric = \
+            get_loss_metric_from_keras_eval(
+                schema_madlib, test_table, compile_params, model_arch,
+                model_weights, use_gpus, accessible_gpus_for_seg, dist_key_mapping,
+                images_per_seg)
 
     if not metrics_type:
         metrics_type = None
@@ -747,7 +759,7 @@ def get_loss_metric_from_keras_eval(schema_madlib, table, compile_params,
     loss_metric = res[0]['loss_metric']
     return loss_metric
 
-
+@timeit_factory()
 def internal_keras_eval_transition(state, dependent_var, independent_var,
                                    dependent_var_shape, independent_var_shape,
                                    model_architecture, serialized_weights, compile_params,
@@ -755,41 +767,42 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
                                    segments_per_host, images_per_seg,
                                    use_gpus, accessible_gpus_for_seg,
                                    is_final_iteration, is_ctq=False, **kwargs):
-    SD = kwargs['SD']
-    device_name = get_device_name_and_set_cuda_env(accessible_gpus_for_seg[current_seg_id], current_seg_id)
-    agg_loss, agg_metric, agg_image_count = state
+    with logsc("internal_keras_eval_transition initialization"):
+        SD = kwargs['SD']
+        device_name = get_device_name_and_set_cuda_env(accessible_gpus_for_seg[current_seg_id], current_seg_id)
+        agg_loss, agg_metric, agg_image_count = state
 
-    # This transition function is common to evaluate as well as the fit functions
-    # and is used to determine when to clear the session.
-    # For evaluate,
-    #   is_final_iteration is always set to true, so the session is cleared once
-    #   evaluated the last buffer on each segment.
-    # When called from fit functions,
-    #  if is_final_iteration is false, the fit function has already created a
-    #   session and a graph that can be used between iterations and cleared only
-    #   for the last buffer of last iteration
-    #  if is_final_iteration is false, we can clear the
+        # This transition function is common to evaluate as well as the fit functions
+        # and is used to determine when to clear the session.
+        # For evaluate,
+        #   is_final_iteration is always set to true, so the session is cleared once
+        #   evaluated the last buffer on each segment.
+        # When called from fit functions,
+        #  if is_final_iteration is false, the fit function has already created a
+        #   session and a graph that can be used between iterations and cleared only
+        #   for the last buffer of last iteration
+        #  if is_final_iteration is false, we can clear the
 
-    segment_model, sess = get_init_model_and_sess(SD, device_name,
-                                                  accessible_gpus_for_seg[current_seg_id],
-                                                  segments_per_host,
-                                                  model_architecture,
-                                                  compile_params)
-    if not agg_image_count:
-        # These should already be 0, but just in case make sure
-        agg_metric = 0
-        agg_loss = 0
-        if is_ctq:
-            with open(serialized_weights, 'rb') as f:
-                weights = f.read()
-            serialized_weights = weights
-        set_model_weights(segment_model, serialized_weights)
+        segment_model, sess = get_init_model_and_sess(SD, device_name,
+                                                    accessible_gpus_for_seg[current_seg_id],
+                                                    segments_per_host,
+                                                    model_architecture,
+                                                    compile_params)
+        if not agg_image_count:
+            # These should already be 0, but just in case make sure
+            agg_metric = 0
+            agg_loss = 0
+            if is_ctq:
+                with open(serialized_weights, 'rb') as f:
+                    weights = f.read()
+                serialized_weights = weights
+            set_model_weights(segment_model, serialized_weights)
 
-    x_val = np_array_float32(independent_var, independent_var_shape)
-    y_val = np_array_int16(dependent_var, dependent_var_shape)
-
-    with tf.device(device_name):
-        res = segment_model.evaluate(x_val, y_val)
+        x_val = np_array_float32(independent_var, independent_var_shape)
+        y_val = np_array_int16(dependent_var, dependent_var_shape)
+    with logsc("internal_keras_eval_transition evaluate"):
+        with tf.device(device_name):
+            res = segment_model.evaluate(x_val, y_val)
 
     # if metric is None, model.evaluate will only return loss as a scalar
     # Otherwise, it will return a list which has loss and metric
@@ -818,11 +831,10 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
     state[0] = agg_loss
     state[1] = agg_metric
     state[2] = agg_image_count
-
     return state
 
 
-
+@timeit_factory()
 def internal_keras_eval_merge(state1, state2, **kwargs):
     # If either state is None, return the other one
     if not state1 or not state2:
@@ -836,9 +848,9 @@ def internal_keras_eval_merge(state1, state2, **kwargs):
     total_image_count = image_count1 + image_count2
 
     merged_state = [ merged_loss, merged_metric , total_image_count ]
-
     return merged_state
 
+@timeit_factory()
 def internal_keras_eval_final(state, **kwargs):
     loss, metric, image_count = state
 
@@ -847,9 +859,9 @@ def internal_keras_eval_final(state, **kwargs):
 
     loss /= image_count
     metric /= image_count
-
     return loss, metric
 
+@timeit_factory()
 def internal_keras_eval_final_ctq(state, **kwargs):
     loss, metric, image_count = state
     # plpy.info("image_count: {}".format(image_count))

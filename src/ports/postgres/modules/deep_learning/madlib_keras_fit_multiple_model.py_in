@@ -44,6 +44,8 @@ from utilities.utilities import is_platform_pg
 from utilities.utilities import get_seg_number
 from utilities.utilities import get_segments_per_host
 from utilities.utilities import rename_table
+from utilities.utilities import timeit_factory
+from utilities.utilities import logsc
 
 import json
 from collections import defaultdict
@@ -83,113 +85,114 @@ class FitMultipleModel():
                  metrics_compute_frequency=None, warm_start=False, name="",
                  description="", **kwargs):
         # set the random seed for visit order/scheduling
-        random.seed(1)
-        if is_platform_pg():
-            plpy.error(
-                "DL: Multiple model training is not supported on PostgreSQL.")
-        self.source_table = source_table
-        self.validation_table = validation_table
-        self.model_selection_table = model_selection_table
-        if self.model_selection_table:
-            self.model_selection_summary_table = add_postfix(self.model_selection_table, '_summary')
+        with logsc("FitMultipleModel initilization"):
+            random.seed(1)
+            if is_platform_pg():
+                plpy.error(
+                    "DL: Multiple model training is not supported on PostgreSQL.")
+            self.source_table = source_table
+            self.validation_table = validation_table
+            self.model_selection_table = model_selection_table
+            if self.model_selection_table:
+                self.model_selection_summary_table = add_postfix(self.model_selection_table, '_summary')
 
-        self.num_iterations = num_iterations
-        self.metrics_compute_frequency = metrics_compute_frequency
-        self.name = name
-        self.description = description
-        self.module_name = 'madlib_keras_fit_multiple_model'
-        self.schema_madlib = schema_madlib
-        self.version = madlib_version(self.schema_madlib)
-        self.mst_key_col = ModelSelectionSchema.MST_KEY
-        self.model_id_col = ModelSelectionSchema.MODEL_ID
-        self.compile_params_col = ModelSelectionSchema.COMPILE_PARAMS
-        self.fit_params_col = ModelSelectionSchema.FIT_PARAMS
-        self.model_arch_table_col = ModelSelectionSchema.MODEL_ARCH_TABLE
-        self.model_weights_col = ModelArchSchema.MODEL_WEIGHTS
-        self.model_arch_col = ModelArchSchema.MODEL_ARCH
-        self.train_mst_metric_eval_time = defaultdict(list)
-        self.train_mst_loss = defaultdict(list)
-        self.train_mst_metric = defaultdict(list)
-        self.info_str = ""
-        self.dep_shape_col = add_postfix(mb_dep_var_col, "_shape")
-        self.ind_shape_col = add_postfix(mb_indep_var_col, "_shape")
-        self.use_gpus = use_gpus
-        self.segments_per_host = get_segments_per_host()
-        if self.use_gpus:
-            self.accessible_gpus_for_seg = get_accessible_gpus_for_seg(
-                self.schema_madlib, self.segments_per_host, self.module_name)
-        else:
-            self.accessible_gpus_for_seg = get_seg_number()*[0]
+            self.num_iterations = num_iterations
+            self.metrics_compute_frequency = metrics_compute_frequency
+            self.name = name
+            self.description = description
+            self.module_name = 'madlib_keras_fit_multiple_model'
+            self.schema_madlib = schema_madlib
+            self.version = madlib_version(self.schema_madlib)
+            self.mst_key_col = ModelSelectionSchema.MST_KEY
+            self.model_id_col = ModelSelectionSchema.MODEL_ID
+            self.compile_params_col = ModelSelectionSchema.COMPILE_PARAMS
+            self.fit_params_col = ModelSelectionSchema.FIT_PARAMS
+            self.model_arch_table_col = ModelSelectionSchema.MODEL_ARCH_TABLE
+            self.model_weights_col = ModelArchSchema.MODEL_WEIGHTS
+            self.model_arch_col = ModelArchSchema.MODEL_ARCH
+            self.train_mst_metric_eval_time = defaultdict(list)
+            self.train_mst_loss = defaultdict(list)
+            self.train_mst_metric = defaultdict(list)
+            self.info_str = ""
+            self.dep_shape_col = add_postfix(mb_dep_var_col, "_shape")
+            self.ind_shape_col = add_postfix(mb_indep_var_col, "_shape")
+            self.use_gpus = use_gpus
+            self.segments_per_host = get_segments_per_host()
+            if self.use_gpus:
+                self.accessible_gpus_for_seg = get_accessible_gpus_for_seg(
+                    self.schema_madlib, self.segments_per_host, self.module_name)
+            else:
+                self.accessible_gpus_for_seg = get_seg_number()*[0]
 
-        self.original_model_output_table = model_output_table
-        if self.original_model_output_table:
-            self.model_info_table = add_postfix(self.original_model_output_table, '_info')
-            self.model_summary_table = add_postfix(
-                self.original_model_output_table, '_summary')
+            self.original_model_output_table = model_output_table
+            if self.original_model_output_table:
+                self.model_info_table = add_postfix(self.original_model_output_table, '_info')
+                self.model_summary_table = add_postfix(
+                    self.original_model_output_table, '_summary')
 
-        self.model_output_table = self.original_model_output_table
+            self.model_output_table = self.original_model_output_table
 
-        """
-        For warm start, we need to copy the model output table to a temp table
-        because we call truncate on the model output table while training.
-        If the query gets aborted, we need to make sure that the user passed
-        model output table can be recovered.
-        """
-        self.warm_start = bool(warm_start)
-        self.warm_start_msts = []
-        if self.warm_start:
-            self.model_output_table = unique_string('initial_model')
+            """
+            For warm start, we need to copy the model output table to a temp table
+            because we call truncate on the model output table while training.
+            If the query gets aborted, we need to make sure that the user passed
+            model output table can be recovered.
+            """
+            self.warm_start = bool(warm_start)
+            self.warm_start_msts = []
+            if self.warm_start:
+                self.model_output_table = unique_string('initial_model')
 
-        self.fit_validator_train = FitMultipleInputValidator(
-            self.source_table, self.validation_table, self.original_model_output_table,
-            self.model_selection_table, self.model_selection_summary_table,
-            mb_dep_var_col, mb_indep_var_col, self.num_iterations,
-            self.model_info_table, self.mst_key_col, self.model_arch_table_col,
-            self.metrics_compute_frequency, self.warm_start, self.use_gpus,
-            self.accessible_gpus_for_seg)
-        if self.metrics_compute_frequency is None:
-            self.metrics_compute_frequency = num_iterations
+            self.fit_validator_train = FitMultipleInputValidator(
+                self.source_table, self.validation_table, self.original_model_output_table,
+                self.model_selection_table, self.model_selection_summary_table,
+                mb_dep_var_col, mb_indep_var_col, self.num_iterations,
+                self.model_info_table, self.mst_key_col, self.model_arch_table_col,
+                self.metrics_compute_frequency, self.warm_start, self.use_gpus,
+                self.accessible_gpus_for_seg)
+            if self.metrics_compute_frequency is None:
+                self.metrics_compute_frequency = num_iterations
 
 
-        self.msts = self.fit_validator_train.msts
-        self.model_arch_table = self.fit_validator_train.model_arch_table
-        self.metrics_iters = []
+            self.msts = self.fit_validator_train.msts
+            self.model_arch_table = self.fit_validator_train.model_arch_table
+            self.metrics_iters = []
 
-        original_cuda_env = None
-        if CUDA_VISIBLE_DEVICES_KEY in os.environ:
-            original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
+            original_cuda_env = None
+            if CUDA_VISIBLE_DEVICES_KEY in os.environ:
+                original_cuda_env = os.environ[CUDA_VISIBLE_DEVICES_KEY]
 
-        self.dist_key_mapping, self.images_per_seg_train = \
-            get_image_count_per_seg_for_minibatched_data_from_db(
-                self.source_table)
-
-        if self.validation_table:
-            self.valid_mst_metric_eval_time = defaultdict(list)
-            self.valid_mst_loss = defaultdict(list)
-            self.valid_mst_metric = defaultdict(list)
-            self.dist_key_mapping_valid, self.images_per_seg_valid = \
+            self.dist_key_mapping, self.images_per_seg_train = \
                 get_image_count_per_seg_for_minibatched_data_from_db(
-                    self.validation_table)
-        self.mst_weights_tbl = unique_string(desp='mst_weights')
-        self.mst_current_schedule_tbl = unique_string(desp='mst_current_schedule')
+                    self.source_table)
 
-        self.dist_keys = query_dist_keys(self.source_table, dist_key_col)
-        if len(self.msts) < len(self.dist_keys):
-            self.msts_for_schedule = self.msts + [None] * \
-                                     (len(self.dist_keys) - len(self.msts))
-        else:
-            self.msts_for_schedule = self.msts
-        random.shuffle(self.msts_for_schedule)
-        self.grand_schedule = self.generate_schedule(self.msts_for_schedule)
-        self.gp_segment_id_col = '0' if is_platform_pg() else GP_SEGMENT_ID_COLNAME
-        self.unlogged_table = "UNLOGGED" if is_platform_gp6_or_up() else ''
+            if self.validation_table:
+                self.valid_mst_metric_eval_time = defaultdict(list)
+                self.valid_mst_loss = defaultdict(list)
+                self.valid_mst_metric = defaultdict(list)
+                self.dist_key_mapping_valid, self.images_per_seg_valid = \
+                    get_image_count_per_seg_for_minibatched_data_from_db(
+                        self.validation_table)
+            self.mst_weights_tbl = unique_string(desp='mst_weights')
+            self.mst_current_schedule_tbl = unique_string(desp='mst_current_schedule')
 
-        if self.warm_start:
-            self.create_model_output_table_warm_start()
-        else:
-            self.create_model_output_table()
+            self.dist_keys = query_dist_keys(self.source_table, dist_key_col)
+            if len(self.msts) < len(self.dist_keys):
+                self.msts_for_schedule = self.msts + [None] * \
+                                        (len(self.dist_keys) - len(self.msts))
+            else:
+                self.msts_for_schedule = self.msts
+            random.shuffle(self.msts_for_schedule)
+            self.grand_schedule = self.generate_schedule(self.msts_for_schedule)
+            self.gp_segment_id_col = '0' if is_platform_pg() else GP_SEGMENT_ID_COLNAME
+            self.unlogged_table = "UNLOGGED" if is_platform_gp6_or_up() else ''
 
-        self.weights_to_update_tbl = unique_string(desp='weights_to_update')
+            if self.warm_start:
+                self.create_model_output_table_warm_start()
+            else:
+                self.create_model_output_table()
+
+            self.weights_to_update_tbl = unique_string(desp='weights_to_update')
         self.fit_multiple_model()
 
         # Update and cleanup metadata tables
@@ -222,28 +225,32 @@ class FitMultipleModel():
     def train_multiple_model(self):
         total_msts = len(self.msts_for_schedule)
         for iter in range(1, self.num_iterations+1):
-            for mst_idx in range(total_msts):
-                mst_row = [self.grand_schedule[dist_key][mst_idx]
-                           for dist_key in self.dist_keys]
-                self.create_mst_schedule_table(mst_row)
-                self.is_final_training_call = (iter == self.num_iterations and mst_idx == total_msts-1)
-                if mst_idx == 0:
-                    start_iteration = time.time()
-                self.run_training(mst_idx)
-                if mst_idx == (total_msts - 1):
-                    end_iteration = time.time()
-                    self.info_str = "\tTime for training in iteration " \
-                                    "{0}: {1} sec\n".format(iter,
-                                                            end_iteration -
-                                                            start_iteration)
+            with logsc("MOP training epoch-{}".format(iter)):
+                for mst_idx in range(total_msts):
+                    with logsc("MOP training epoch-{} subepoch-{}".format(iter, mst_idx)):
+                        mst_row = [self.grand_schedule[dist_key][mst_idx]
+                                for dist_key in self.dist_keys]
+                        self.create_mst_schedule_table(mst_row)
+                        self.is_final_training_call = (iter == self.num_iterations and mst_idx == total_msts-1)
+                        if mst_idx == 0:
+                            start_iteration = time.time()
+                        self.run_training(mst_idx)
+                        if mst_idx == (total_msts - 1):
+                            end_iteration = time.time()
+                            self.info_str = "\tTime for training in iteration " \
+                                            "{0}: {1} sec\n".format(iter,
+                                                                    end_iteration -
+                                                                    start_iteration)
             if should_compute_metrics_this_iter(iter,
                                                 self.metrics_compute_frequency,
                                                 self.num_iterations):
                 self.metrics_iters.append(iter)
                 self.info_str += "\tTraining set after iteration {0}:".format(iter)
-                self.evaluate_model(iter, self.source_table, True)
+                with logsc("MOP training metric epoch-{}".format(iter)):
+                    self.evaluate_model(iter, self.source_table, True)
                 if self.validation_table:
-                    self.evaluate_model(iter, self.validation_table, False)
+                    with logsc("MOP validation metric epoch-{}".format(iter)):
+                        self.evaluate_model(iter, self.validation_table, False)
             plpy.info("\n"+self.info_str)
 
     def evaluate_model(self, epoch, table, is_train):
