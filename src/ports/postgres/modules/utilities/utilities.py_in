@@ -24,6 +24,43 @@ import plpy
 
 m4_changequote(`<!', `!>')
 
+DEBUG = True
+
+
+def tstamp():
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return timestamp
+
+
+def logs(message):
+    timestamp = tstamp()
+    plpy.info("{}: {}".format(message, timestamp))
+
+
+def timeit_factory(debug=DEBUG):
+    def timeit(func):
+        def timed(*args, **kwargs):
+            function_name = func.__name__
+            if debug:
+                logs("Start inside {}".format(function_name))
+            result = func(*args, **kwargs)
+            if debug:
+                logs("End inside {}".format(function_name))
+            return result
+        return timed
+    return timeit
+
+
+class logsc(object):
+    def __init__(self, log, debug=DEBUG):
+        self.log = log
+    def __enter__(self):
+        if self.debug:
+            logs("Start {}".format(self.log))
+    def __exit__(self, type, value, traceback):
+        if self.debug:
+            logs("End {}".format(self.log))
+
 def plpy_execute_debug(sql, *args, **kwargs):
     """ Replace plpy.execute(sql, ...) with
         plpy_execute_debug(sql, ...) to debug
