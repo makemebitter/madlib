@@ -534,9 +534,9 @@ def fit_transition(state, dependent_var, independent_var, dependent_var_shape,
         # Fit segment model on data
         #TODO consider not doing this every time
         fit_params = parse_and_validate_fit_params(fit_params)
-    with logsc("Start fit_transition training"):
+    with logsc("fit_transition training"):
         segment_model.fit(x_train, y_train, **fit_params)
-    with logsc("Start fit_transition clearing"):
+    with logsc("fit_transition clearing"):
         # Aggregating number of images, loss and accuracy
         agg_image_count += len(x_train)
         total_images = get_image_count_per_seg_from_array(dist_key_mapping.index(dist_key),
