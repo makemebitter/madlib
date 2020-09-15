@@ -18,5 +18,5 @@ for host in "${hostsarr[@]}"; do
 done
 
 # Install
-$root/build/src/bin/madpack -p greenplum -c gpadmin@master:5432/cerebro reinstall
+yes | $root/build/src/bin/madpack -p greenplum -c gpadmin@master:5432/cerebro reinstall
 
