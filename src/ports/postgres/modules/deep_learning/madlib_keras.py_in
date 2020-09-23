@@ -519,9 +519,10 @@ def fit_transition(state, dependent_var, independent_var, dependent_var_shape,
         
         if not state:
             if is_ctq:
-                with open(prev_serialized_weights, 'rb') as f:
-                    weights = f.read()
-                prev_serialized_weights = weights
+                with logsc("fit_transition model hopping"):
+                    with open(prev_serialized_weights, 'rb') as f:
+                        weights = f.read()
+                    prev_serialized_weights = weights
             agg_image_count = 0
             set_model_weights(segment_model, prev_serialized_weights)
         else:
@@ -793,9 +794,10 @@ def internal_keras_eval_transition(state, dependent_var, independent_var,
             agg_metric = 0
             agg_loss = 0
             if is_ctq:
-                with open(serialized_weights, 'rb') as f:
-                    weights = f.read()
-                serialized_weights = weights
+                with logsc("internal_keras_eval_transition model hopping"):
+                    with open(serialized_weights, 'rb') as f:
+                        weights = f.read()
+                    serialized_weights = weights
             set_model_weights(segment_model, serialized_weights)
 
         x_val = np_array_float32(independent_var, independent_var_shape)
