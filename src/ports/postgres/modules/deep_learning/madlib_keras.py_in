@@ -89,7 +89,7 @@ def fit(schema_madlib, source_table, model, model_arch_table,
         use_gpus, validation_table=None,
         metrics_compute_frequency=None, warm_start=False, name="",
         description="", object_table=None, **kwargs):
-        description="", **kwargs):
+
     with logsc("MA fit initialization"):
         module_name = 'madlib_keras_fit'
         fit_params = "" if not fit_params else fit_params
@@ -164,7 +164,7 @@ def fit(schema_madlib, source_table, model, model_arch_table,
         # object definition from the object table
         custom_fn_list = get_custom_functions_list(compile_params)
         if object_table is not None:
-        custom_function_map = query_custom_functions_map(object_table, custom_fn_list)
+            custom_function_map = query_custom_functions_map(object_table, custom_fn_list)
         elif len(custom_fn_list) >= 1:
             # Error out if custom_function is called without specifying the object table
             # with the function definition

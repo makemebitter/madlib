@@ -4,7 +4,6 @@ from datetime import datetime
 import re
 import time
 import random
-import datetime
 from distutils.util import strtobool
 # import numpy as np
 
@@ -29,7 +28,7 @@ DEBUG = True
 
 
 def tstamp():
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return timestamp
 
 

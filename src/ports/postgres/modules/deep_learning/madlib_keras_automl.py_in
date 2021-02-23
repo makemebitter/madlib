@@ -693,7 +693,6 @@ class AutoMLHyperopt(KerasAutoML):
         self.fit_params_grid = self.fit_params_grid.replace('\n', '').replace(' ', '')
         try:
             self.compile_params_grid = literal_eval(self.compile_params_grid)
-
         except:
             plpy.error("Invalid syntax in 'compile_params_dict'")
         try:
@@ -900,6 +899,8 @@ class AutoMLHyperopt(KerasAutoML):
                     self.module_name,
                     self.original_param_details(cp)[0],
                     ['linear', 'log']))
+        elif cp == 'batch_size':
+            return hp.quniform(cp, param_value_list[0], param_value_list[1], 1)
         else:
             # random sampling
             return hp.choice(cp, param_value_list)
