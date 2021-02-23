@@ -450,7 +450,7 @@ class AutoMLHyperband(KerasAutoML):
             n = int(math.ceil(int((self.s_max+1)/(s+1))*math.pow(self.eta, s))) # initial number of configurations
             r = self.R * math.pow(self.eta, -s) # initial number of iterations to run configurations for
             initial_vals[s] = (n, int(round(r)))
-        self.start_training_time = self.get_current_timestamp()
+        # self.start_training_time = self.get_current_timestamp()
         self.start_training_time = get_current_timestamp(AutoMLConstants.TIME_FORMAT)
         random_search = MstSearch(self.schema_madlib,
                                   self.model_arch_table,
@@ -499,9 +499,19 @@ class AutoMLHyperband(KerasAutoML):
             self.warm_start = int(i != 0)
             mcf = self.metrics_compute_frequency if self._is_valid_metrics_compute_frequency(num_iterations) else None
             with SetGUC("plan_cache_mode", "force_generic_plan"):
-                model_training = FitMultipleModel(self.schema_madlib, self.source_table, AutoMLSchema.TEMP_OUTPUT_TABLE,
-                                              AutoMLSchema.TEMP_MST_TABLE, num_iterations, self.use_gpus,
-                                              self.validation_table, mcf, self.warm_start, self.name, self.description)
+                model_training = FitMultipleModel(
+                    self.schema_madlib,
+                    self.source_table,
+                    AutoMLSchema.TEMP_OUTPUT_TABLE,
+                    AutoMLSchema.TEMP_MST_TABLE,
+                    num_iterations,
+                    use_gpu=self.use_gpus,
+                    validation_table=self.validation_table,
+                    metrics_compute_frequency=mcf,
+                    warm_start=self.warm_start,
+                    name=self.name,
+                    description=self.description
+                )
             self.update_model_output_table(model_training)
             self.update_model_output_info_table(i, model_training, initial_vals)
 
@@ -790,9 +800,20 @@ class AutoMLHyperopt(KerasAutoML):
 
             plpy.info("***Evaluating {n} newly suggested model configurations***".format(n=n))
             fit_multiple_start_time = time.time()
-            model_training = FitMultipleModel(self.schema_madlib, self.source_table, AutoMLConstants.TEMP_OUTPUT_TABLE,
-                                              AutoMLConstants.TEMP_MST_TABLE, self.num_iters, self.use_gpus, self.validation_table,
-                                              self.metrics_compute_frequency, False, self.name, self.description, fit_multiple_runtime)
+            model_training = FitMultipleModel(
+                self.schema_madlib, 
+                self.source_table,
+                AutoMLConstants.TEMP_OUTPUT_TABLE,
+                AutoMLConstants.TEMP_MST_TABLE,
+                self.num_iters,
+                use_gpus=self.use_gpus,
+                validation_table=self.validation_table,
+                metrics_compute_frequency=self.metrics_compute_frequency,
+                warm_start=False,
+                name=self.name,
+                description=self.description,
+                metrics_elapsed_time_offset=fit_multiple_runtime
+            )
             fit_multiple_runtime += time.time() - fit_multiple_start_time
             if make_mst_summary:
                 self.generate_mst_summary_table(self.model_selection_summary_table)
@@ -899,8 +920,6 @@ class AutoMLHyperopt(KerasAutoML):
                     self.module_name,
                     self.original_param_details(cp)[0],
                     ['linear', 'log']))
-        elif cp == 'batch_size':
-            return hp.quniform(cp, param_value_list[0], param_value_list[1], 1)
         else:
             # random sampling
             return hp.choice(cp, param_value_list)
