@@ -61,6 +61,10 @@ class AutoMLConstants:
     INT_MAX = 2 ** 31 - 1
     TARGET_SCHEMA = 'public'
 
+
+AutoMLSchema = AutoMLConstants
+
+
 @MinWarning("warning")
 class HyperbandSchedule():
     """The utility class for loading a hyperband schedule table with algorithm inputs.
@@ -502,8 +506,8 @@ class AutoMLHyperband(KerasAutoML):
                 model_training = FitMultipleModel(
                     self.schema_madlib,
                     self.source_table,
-                    AutoMLSchema.TEMP_OUTPUT_TABLE,
-                    AutoMLSchema.TEMP_MST_TABLE,
+                    AutoMLConstants.TEMP_OUTPUT_TABLE,
+                    AutoMLConstants.TEMP_MST_TABLE,
                     num_iterations,
                     use_gpu=self.use_gpus,
                     validation_table=self.validation_table,

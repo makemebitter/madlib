@@ -187,10 +187,11 @@ def fit(schema_madlib, source_table, model, model_arch_table,
                 {use_gpus}::BOOLEAN,
                 ARRAY{accessible_gpus_for_seg},
                 $1,
-                $2
+                $2,
+                $3
             ) AS iteration_result
             FROM {source_table}
-            """.format(**locals()), ["bytea", "boolean"])
+            """.format(**locals()), ["bytea", "boolean", "bytea"])
 
         plpy.info("""
             SELECT {schema_madlib}.fit_step(
@@ -224,7 +225,7 @@ def fit(schema_madlib, source_table, model, model_arch_table,
             start_iteration = time.time()
             is_final_iteration = (i == num_iterations)
             serialized_weights = plpy.execute(run_training_iteration,
-                                            [serialized_weights, is_final_iteration]
+                                            [serialized_weights, is_final_iteration, custom_function_map]
                                             )[0]['iteration_result']
             end_iteration = time.time()
         info_str = "\tTime for training in iteration {0}: {1} sec".format(i,
