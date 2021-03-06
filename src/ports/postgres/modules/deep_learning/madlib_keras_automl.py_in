@@ -219,7 +219,7 @@ class KerasAutoML(object):
         self.automl_method = automl_method
         self.automl_params = automl_params
         self.random_state = random_state
-
+        self.rand_state = np.random.RandomState(self.random_state)
         self.object_table = object_table
         self.use_gpus = use_gpus if use_gpus else False
         self.validation_table = validation_table
@@ -773,7 +773,7 @@ class AutoMLHyperopt(KerasAutoML):
         make_mst_summary = True
         trials = Trials()
         domain = Domain(None, self.get_search_space())
-        rand_state = np.random.RandomState(self.random_state)
+        
         configs_lst = self.get_configs_list(self.num_configs, self.num_segments)
 
         self.start_training_time = get_current_timestamp(AutoMLConstants.TIME_FORMAT)
@@ -785,7 +785,7 @@ class AutoMLHyperopt(KerasAutoML):
             hyperopt_params = []
             sampled_params = []
             for j in range(i, i + n):
-                new_param = self.algorithm.suggest([j], domain, trials, rand_state.randint(0, AutoMLConstants.INT_MAX))
+                new_param = self.algorithm.suggest([j], domain, trials, self.rand_state.randint(0, AutoMLConstants.INT_MAX))
                 new_param[0]['status'] = STATUS_RUNNING
 
                 trials.insert_trial_docs(new_param)
